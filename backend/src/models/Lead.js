@@ -1,0 +1,89 @@
+import mongoose from 'mongoose';
+const { Schema } = mongoose;
+
+const LeadSchema = new Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  company: {
+    type: String
+  },
+  companyId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Company'
+  },
+  phone: {
+    type: String
+  },
+  email: {
+    type: String
+  },
+  service: {
+    type: String // Service Name
+  },
+  serviceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Service'
+  },
+  source: {
+    type: String,
+    enum: [
+      'Website',
+      'Referral',
+      'Cold Call',
+      'LinkedIn',
+      'Exhibition',
+      'Trade Show',
+      'Email Campaign',
+      'Partner',
+      'Google Ads',
+      'Other'
+    ]
+  },
+  assignedTo: {
+    type: String
+  },
+  assignedToClerkId: {
+    type: String
+  },
+  status: {
+    type: String,
+    enum: [
+      'New',
+      'Contacted',
+      'Interested',
+      'Proposal Sent',
+      'Negotiation',
+      'Converted',
+      'Lost',
+      'Inactive'
+    ],
+    default: 'New'
+  },
+  notes: {
+    type: String
+  },
+  isFavorite: {
+    type: Boolean,
+    default: false
+  },
+  createdDate: {
+    type: Date,
+    default: Date.now
+  },
+  lastContacted: {
+    type: Date
+  },
+  nextFollowUp: {
+    type: Date
+  },
+  createdByClerkId: {
+    type: String
+  }
+});
+
+const Lead = mongoose.model("Lead", LeadSchema);
+
+export default Lead;
