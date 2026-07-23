@@ -1,16 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   ArrowUpDown, Calendar, ChevronLeft, ChevronRight, Columns3, Download,
   Filter, MessageSquare, MoreHorizontal, Phone, Plus, RefreshCw, Search,
   Sparkles, Star, Trash2, Upload, X, Mail, FileText, Handshake, CheckCircle2,
-  Clock, User as UserIcon, PhoneCall, StickyNote, Pencil, Globe,
+  Clock, User as UserIcon, PhoneCall, StickyNote, Pencil, Globe, Loader2, Building2,
+  ExternalLink, ShieldCheck, Tag
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
 import { StatusBadge } from "@/components/crm/StatusBadge";
-import { leads as allLeads, servicesList } from "@/data/dummy";
+import { leads as dummyLeads, servicesList } from "@/data/dummy";
 import { cn } from "@/lib/utils";
+import { useApi } from "@/lib/api";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/leads")({
   component: LeadsPage,
@@ -19,6 +22,10 @@ export const Route = createFileRoute("/leads")({
 const statuses = ["New", "Contacted", "Interested", "Proposal Sent", "Negotiation", "Converted", "Lost", "Inactive"];
 const serviceNames = servicesList.map((s) => s.name);
 const quickFilters = ["All Leads", "Today's Leads", "New Leads", "Unassigned", "Follow-up Today", "Overdue", "Favorites"];
+
+const ENQUIRY_STATUSES = ["Open", "In Progress", "Awaiting Response", "On Hold", "Qualified", "Closed - Won", "Closed - Dead"];
+const DEAD_REASONS = ["Budget Constraints", "Chose Competitor", "No Response", "Not a Fit", "Timing Issues", "Duplicate Lead", "Invalid Contact", "Other"];
+const MEETING_TYPES = ["Not Scheduled", "Discovery Call", "Product Demo", "Proposal Review", "Negotiation", "Site Visit", "Follow-up", "Closed"];
 
 const ALL_COLUMNS = [
   { key: "lead", label: "Lead" },
@@ -36,7 +43,9 @@ const ALL_COLUMNS = [
 const DEFAULT_COLUMNS = ["lead", "company", "service", "status"];
 
 function LeadsPage() {
-  const [leadsList, setLeadsList] = useState(allLeads);
+  const api = useApi();
+  const [leadsList, setLeadsList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [quick, setQuick] = useState("All Leads");
@@ -47,12 +56,116 @@ function LeadsPage() {
   const [openAdd, setOpenAdd] = useState(false);
   const [active, setActive] = useState(null);
   const [editing, setEditing] = useState(null);
-  const [favorites, setFavorites] = useState(new Set(["L-1002", "L-1007"]));
+  const [favorites, setFavorites] = useState(new Set());
   const [visibleCols, setVisibleCols] = useState(new Set(DEFAULT_COLUMNS));
   const [openColumns, setOpenColumns] = useState(false);
 
-  const handleStatusChange = (id, newStatus) => {
+  const fetchLeads = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get("/leads");
+      const data = res.data?.data || [];
+
+      const formatted = data.map(l => ({
+        id: l.code || l._id,
+        _id: l._id,
+        name: l.name,
+        company: l.company || "",
+        service: l.service || "",
+        phone: l.phone || "",
+        email: l.email || "",
+        source: l.source || "Website",
+        assignedTo: l.assignedTo || "Nikhil Rao",
+        status: l.status || "New",
+        isFavorite: l.isFavorite || false,
+        createdDate: l.createdDate ? new Date(l.createdDate).toLocaleDateString("en-IN") : "",
+        lastContacted: l.lastContacted ? new Date(l.lastContacted).toLocaleDateString("en-IN") : "",
+        nextFollowUp: l.nextFollowUp ? new Date(l.nextFollowUp).toLocaleDateString("en-IN") : "",
+        notes: l.notes || "",
+        enquiryStatus: l.enquiryStatus || "Open",
+        deadReason: l.deadReason || "",
+        websiteUrl: l.websiteUrl || "",
+        companySize: l.companySize || "Not specified",
+        region: l.region || "",
+        meetingType: l.meetingType || "Not Scheduled",
+        meetingDate: l.meetingDate ? new Date(l.meetingDate).toISOString().slice(0, 16) : "",
+        meetingMode: l.meetingMode || "Video Call",
+        meetingOutcome: l.meetingOutcome || "Pending",
+      }));
+      setLeadsList(formatted);
+      const favSet = new Set(formatted.filter(l => l.isFavorite).map(l => l.id));
+      setFavorites(favSet);
+    } catch (err) {
+      console.error("Failed to load leads", err);
+      setLeadsList([]);
+      setFavorites(new Set());
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
+
+  // Real-time backend sync on inline status dropdown change
+  const handleStatusChange = async (id, newStatus, mongoId) => {
     setLeadsList((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
+    if (mongoId) {
+      try {
+        await api.patch(`/leads/${mongoId}/status`, { status: newStatus });
+        toast.success(`Status updated to ${newStatus}`);
+      } catch (err) {
+        toast.error("Failed to update status in DB");
+        fetchLeads();
+      }
+    }
+  };
+
+  // Real-time backend sync on favorite toggle
+  const toggleFav = async (id, mongoId) => {
+    const next = new Set(favorites);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setFavorites(next);
+    setLeadsList((prev) => prev.map((l) => (l.id === id ? { ...l, isFavorite: !l.isFavorite } : l)));
+
+    if (mongoId) {
+      try {
+        await api.patch(`/leads/${mongoId}/favorite`);
+      } catch (err) {
+        console.error("Failed to toggle favorite", err);
+      }
+    }
+  };
+
+  const handleDelete = async (lead) => {
+    if (!confirm(`Are you sure you want to delete lead "${lead.name}"?`)) return;
+    try {
+      if (lead._id) {
+        await api.delete(`/leads/${lead._id}`);
+      }
+      setLeadsList(prev => prev.filter(l => (l._id || l.id) !== (lead._id || lead.id)));
+      if (active && (active._id === lead._id || active.id === lead.id)) setActive(null);
+      toast.success("Lead deleted successfully");
+    } catch (err) {
+      toast.error("Failed to delete lead");
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const res = await api.get("/leads/export/csv", { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "leads.csv");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success("Exported leads to CSV");
+    } catch (err) {
+      toast.error("Export failed");
+    }
   };
 
   const toggleCol = (key) => {
@@ -75,7 +188,7 @@ function LeadsPage() {
       );
     }
     return out;
-  }, [statusFilter, quick, search, favorites]);
+  }, [leadsList, statusFilter, quick, search, favorites]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -96,11 +209,6 @@ function LeadsPage() {
     next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
   };
-  const toggleFav = (id) => {
-    const next = new Set(favorites);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setFavorites(next);
-  };
 
   return (
     <AppLayout>
@@ -110,60 +218,46 @@ function LeadsPage() {
             <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sales Workspace</div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Leads</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filtered.length} of {allLeads.length} leads · {selected.size} selected
+              {filtered.length} of {leadsList.length} leads · {selected.size} selected
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <IconButton onClick={() => setOpenFilter(true)}><Filter size={14} /> Filters</IconButton>
-            <IconButton><Upload size={14} /> Import</IconButton>
-            <IconButton><Download size={14} /> Export</IconButton>
+            <IconButton onClick={handleExportCSV}><Download size={14} /> Export CSV</IconButton>
             <div className="relative">
-              <IconButton onClick={() => setOpenColumns((v) => !v)}><Columns3 size={14} /> Columns</IconButton>
+              <IconButton onClick={() => setOpenColumns(!openColumns)}>
+                <Columns3 size={14} /> Columns
+              </IconButton>
               {openColumns && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setOpenColumns(false)} />
-                  <div className="absolute right-0 z-50 mt-2 w-60 rounded-xl border border-border bg-card p-2 shadow-lg">
-                    <div className="flex items-center justify-between px-2 py-1.5">
-                      <div className="text-xs font-semibold">Visible columns</div>
-                      <button
-                        onClick={() => setVisibleCols(new Set(DEFAULT_COLUMNS))}
-                        className="text-[11px] text-indigo-600 hover:underline"
-                      >
-                        Reset
-                      </button>
-                    </div>
-                    <div className="max-h-72 overflow-y-auto">
-                      {ALL_COLUMNS.map((c) => (
-                        <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-muted">
-                          <input
-                            type="checkbox"
-                            checked={isVisible(c.key)}
-                            onChange={() => toggleCol(c.key)}
-                            className="h-4 w-4 rounded border-border accent-indigo-500"
-                          />
-                          {c.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </>
+                <div className="absolute right-0 top-full z-20 mt-1.5 w-48 rounded-xl border border-border bg-card p-2 shadow-xl animate-fade-in">
+                  <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Toggle Columns</div>
+                  {ALL_COLUMNS.map((c) => (
+                    <label key={c.key} className="flex items-center gap-2 rounded-lg px-2 py-1 text-xs hover:bg-muted cursor-pointer">
+                      <input type="checkbox" checked={isVisible(c.key)} onChange={() => toggleCol(c.key)} className="rounded border-border" />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
               )}
             </div>
-            <IconButton><RefreshCw size={14} /></IconButton>
-            <button onClick={() => setOpenAdd(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-3 py-2 text-xs font-medium text-white shadow-md shadow-indigo-500/20 hover:shadow-lg">
+            <button
+              onClick={() => setOpenAdd(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-500/20 hover:shadow-lg transition cursor-pointer"
+            >
               <Plus size={14} /> Add Lead
             </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Quick Filter Bar */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-2 overflow-x-auto">
           {quickFilters.map((q) => (
             <button
               key={q}
-              onClick={() => setQuick(q)}
+              onClick={() => { setQuick(q); setPage(1); }}
               className={cn(
-                "rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                quick === q ? "border-indigo-500 bg-indigo-500 text-white shadow-sm" : "border-border bg-card hover:border-indigo-300 hover:text-indigo-600",
+                "rounded-xl px-3 py-1.5 text-xs font-medium transition cursor-pointer whitespace-nowrap",
+                quick === q ? "bg-indigo-500 text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               {q}
@@ -171,132 +265,120 @@ function LeadsPage() {
           ))}
         </div>
 
-        <div className="rounded-2xl border border-border bg-card shadow-sm">
-          <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" size={16} />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, email, company, phone…"
-                className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-500/20"
-              />
-            </div>
+        {/* Search & Actions Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" size={16} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, company, email, phone…"
+              className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+            />
+          </div>
+          <div className="flex items-center gap-2">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400"
             >
-              <option value="All">All statuses</option>
+              <option value="All">All Statuses</option>
               {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            {selected.size > 0 && (
-              <div className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs dark:border-indigo-500/30 dark:bg-indigo-500/10">
-                <span className="font-medium text-indigo-700 dark:text-indigo-300">{selected.size} selected</span>
-                <button className="rounded-md px-2 py-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20">Assign</button>
-                <button className="rounded-md px-2 py-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20">Status</button>
-                <button className="rounded-md px-2 py-0.5 text-rose-600 hover:bg-rose-100">Delete</button>
-                <button onClick={() => setSelected(new Set())} className="rounded-md p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20"><X size={12} /></button>
-              </div>
-            )}
           </div>
+        </div>
 
+        {/* Main Table */}
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10 bg-muted/60 backdrop-blur-md">
-                <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <thead className="bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
                   <th className="w-10 px-4 py-3">
-                    <input type="checkbox" onChange={toggleAll} checked={paginated.length > 0 && paginated.every((l) => selected.has(l.id))} className="h-4 w-4 rounded border-border accent-indigo-500" />
+                    <input type="checkbox" checked={paginated.length > 0 && paginated.every((l) => selected.has(l.id))} onChange={toggleAll} className="rounded border-border" />
                   </th>
+                  <th className="w-8 px-2 py-3" />
                   {ALL_COLUMNS.filter((c) => isVisible(c.key)).map((c) => (
-                    <th key={c.key} className="whitespace-nowrap px-4 py-3">
-                      <button className="inline-flex items-center gap-1 hover:text-foreground">
-                        {c.label} <ArrowUpDown size={10} className="opacity-40" />
-                      </button>
-                    </th>
+                    <th key={c.key} className="px-4 py-3">{c.label}</th>
                   ))}
-                  <th className="px-4 py-3" />
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {paginated.map((l) => (
-                  <tr
-                    key={l.id}
-                    onClick={() => setActive(l)}
-                    className="group cursor-pointer border-t border-border transition hover:bg-muted/40"
-                  >
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleOne(l.id)} className="h-4 w-4 rounded border-border accent-indigo-500" />
+              <tbody className="divide-y divide-border">
+                {loading ? (
+                  <tr>
+                    <td colSpan={12} className="p-8 text-center text-muted-foreground">
+                      <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
+                      <div className="mt-2 text-xs">Loading leads from MongoDB Atlas...</div>
                     </td>
-                    {isVisible("lead") && <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <button onClick={(e) => { e.stopPropagation(); toggleFav(l.id); }} className="text-muted-foreground transition hover:text-amber-500">
-                          <Star size={14} className={cn(favorites.has(l.id) && "fill-amber-400 text-amber-400")} />
-                        </button>
-                        <UserAvatar name={l.name} size="sm" />
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{l.name}</div>
-                          <div className="truncate text-[11px] text-muted-foreground">{l.id}</div>
+                  </tr>
+                ) : paginated.map((l) => (
+                  <tr key={l._id || l.id} className="group hover:bg-muted/40 transition">
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleOne(l.id)} className="rounded border-border" />
+                    </td>
+                    <td className="px-2 py-3">
+                      <button onClick={() => toggleFav(l.id, l._id)} className="text-muted-foreground hover:text-amber-400 cursor-pointer">
+                        <Star size={14} className={cn(favorites.has(l.id) && "fill-amber-400 text-amber-400")} />
+                      </button>
+                    </td>
+
+                    {isVisible("lead") && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <UserAvatar name={l.name} size="sm" />
+                          <div>
+                            <button onClick={() => setActive(l)} className="font-semibold text-foreground hover:text-indigo-600 text-left cursor-pointer underline decoration-indigo-200">
+                              {l.name}
+                            </button>
+                            <div className="text-[11px] text-muted-foreground">{l.id}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>}
-                    {isVisible("company") && <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{l.company}</td>}
-                    {isVisible("service") && <td className="whitespace-nowrap px-4 py-3"><span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">{l.service || "General Advisory"}</span></td>}
-                    {isVisible("phone") && <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{l.phone}</td>}
-                    {isVisible("email") && <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{l.email}</td>}
-                    {isVisible("source") && <td className="whitespace-nowrap px-4 py-3"><span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium">{l.source}</span></td>}
-                    {isVisible("assigned") && <td className="whitespace-nowrap px-4 py-3">
-                      <div className="flex items-center gap-2"><UserAvatar name={l.assignedTo} size="xs" /><span className="text-xs">{l.assignedTo.split(" ")[0]}</span></div>
-                    </td>}
+                      </td>
+                    )}
+                    {isVisible("company") && <td className="px-4 py-3 font-medium">{l.company}</td>}
+                    {isVisible("service") && <td className="px-4 py-3 text-xs text-muted-foreground">{l.service}</td>}
+                    {isVisible("phone") && <td className="px-4 py-3 text-xs">{l.phone}</td>}
+                    {isVisible("email") && <td className="px-4 py-3 text-xs text-muted-foreground">{l.email}</td>}
+                    {isVisible("source") && <td className="px-4 py-3 text-xs">{l.source}</td>}
+                    {isVisible("assigned") && <td className="px-4 py-3 text-xs font-medium">{l.assignedTo}</td>}
+
                     {isVisible("status") && (
-                      <td className="whitespace-nowrap px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-4 py-3">
                         <select
                           value={l.status}
-                          onChange={(e) => handleStatusChange(l.id, e.target.value)}
-                          className={cn(
-                            "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-semibold outline-none transition",
-                            l.status === "New" && "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-500/10 dark:text-blue-300",
-                            l.status === "Contacted" && "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300",
-                            l.status === "Interested" && "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-300",
-                            l.status === "Proposal Sent" && "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-500/10 dark:text-violet-300",
-                            l.status === "Negotiation" && "border-purple-300 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-500/10 dark:text-purple-300",
-                            l.status === "Converted" && "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300",
-                            l.status === "Lost" && "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-500/10 dark:text-rose-300",
-                            l.status === "Inactive" && "border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-500/10 dark:text-slate-300",
-                          )}
+                          onChange={(e) => handleStatusChange(l.id, e.target.value, l._id)}
+                          className="rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold outline-none focus:border-indigo-400 cursor-pointer"
                         >
-                          {statuses.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
+                          {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
                     )}
-                    {isVisible("created") && <td className="whitespace-nowrap px-4 py-3 text-[11px] text-muted-foreground">{l.createdDate}</td>}
-                    {isVisible("lastContact") && <td className="whitespace-nowrap px-4 py-3 text-[11px] text-muted-foreground">{l.lastContacted}</td>}
-                    {isVisible("nextFollowUp") && <td className="whitespace-nowrap px-4 py-3 text-[11px] font-medium">{l.nextFollowUp}</td>}
-                    <td className="whitespace-nowrap px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-0.5 opacity-0 transition group-hover:opacity-100">
-                        <button className="rounded-lg p-1.5 text-muted-foreground hover:bg-emerald-50 hover:text-emerald-600"><Phone size={14} /></button>
-                        <button className="rounded-lg p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600"><Mail size={14} /></button>
-                        <button onClick={() => setEditing(l)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
-                        <button className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><MoreHorizontal size={14} /></button>
+
+                    {isVisible("created") && <td className="px-4 py-3 text-xs text-muted-foreground">{l.createdDate}</td>}
+                    {isVisible("lastContact") && <td className="px-4 py-3 text-xs text-muted-foreground">{l.lastContacted}</td>}
+                    {isVisible("nextFollowUp") && <td className="px-4 py-3 text-xs text-muted-foreground">{l.nextFollowUp}</td>}
+
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                        <button onClick={() => setActive(l)} title="View Detail Drawer" className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer">
+                          <FileText size={14} />
+                        </button>
+                        <button onClick={() => setEditing(l)} title="Edit Lead" className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => handleDelete(l)} title="Delete Lead" className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {paginated.length === 0 && (
+                {!loading && paginated.length === 0 && (
                   <tr>
-                    <td colSpan={visibleCols.size + 2} className="p-16 text-center">
-                      <div className="mx-auto max-w-sm">
-                        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-muted"><Sparkles size={22} className="text-muted-foreground" /></div>
-                        <div className="mt-3 text-sm font-semibold">No leads found</div>
-                        <div className="mt-1 text-xs text-muted-foreground">Try adjusting your filters or add a new lead to get started.</div>
-                        <button onClick={() => setOpenAdd(true)} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-500 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-600">
-                          <Plus size={14} /> Add Lead
-                        </button>
-                      </div>
+                    <td colSpan={12} className="p-12 text-center text-muted-foreground">
+                      <Sparkles size={24} className="mx-auto text-muted-foreground/60" />
+                      <div className="mt-2 font-medium text-sm">No leads match criteria</div>
                     </td>
                   </tr>
                 )}
@@ -304,253 +386,376 @@ function LeadsPage() {
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4">
-            <div className="text-xs text-muted-foreground">
-              Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}
-            </div>
-            <div className="flex items-center gap-1">
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded-lg border border-border p-1.5 disabled:opacity-40 hover:bg-muted"><ChevronLeft size={14} /></button>
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button key={i} onClick={() => setPage(i + 1)} className={cn("h-8 w-8 rounded-lg text-xs font-medium", page === i + 1 ? "bg-indigo-500 text-white" : "hover:bg-muted")}>
-                  {i + 1}
-                </button>
-              ))}
-              <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-lg border border-border p-1.5 disabled:opacity-40 hover:bg-muted"><ChevronRight size={14} /></button>
+          {/* Pagination */}
+          <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
+            <div>Showing {Math.min((page - 1) * pageSize + 1, filtered.length)} to {Math.min(page * pageSize, filtered.length)} of {filtered.length}</div>
+            <div className="flex items-center gap-2">
+              <button disabled={page === 1} onClick={() => setPage(page - 1)} className="rounded-lg border border-border p-1.5 hover:bg-muted disabled:opacity-40 cursor-pointer">
+                <ChevronLeft size={14} />
+              </button>
+              <span>Page {page} of {totalPages}</span>
+              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="rounded-lg border border-border p-1.5 hover:bg-muted disabled:opacity-40 cursor-pointer">
+                <ChevronRight size={14} />
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {openFilter && <FilterDrawer onClose={() => setOpenFilter(false)} />}
-      {active && <LeadDetailDrawer lead={active} onClose={() => setActive(null)} onEdit={(l) => { setActive(null); setEditing(l); }} />}
-      {openAdd && <AddLeadModal onClose={() => setOpenAdd(false)} />}
-      {editing && <EditLeadModal lead={editing} onClose={() => setEditing(null)} />}
+      {/* Slide-over Detail Drawer when clicking Lead */}
+      {active && (
+        <LeadDetailDrawer
+          lead={active}
+          onClose={() => setActive(null)}
+          onEdit={() => { setEditing(active); setActive(null); }}
+          onDelete={() => handleDelete(active)}
+        />
+      )}
+
+      {openAdd && <AddLeadModal onClose={() => setOpenAdd(false)} onSuccess={fetchLeads} />}
+      {editing && <EditLeadModal lead={editing} onClose={() => setEditing(null)} onSuccess={fetchLeads} />}
     </AppLayout>
   );
 }
 
 function IconButton({ children, onClick }) {
   return (
-    <button onClick={onClick} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium shadow-sm transition hover:bg-muted">
+    <button onClick={onClick} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition cursor-pointer">
       {children}
     </button>
   );
 }
 
-function FilterDrawer({ onClose }) {
+// Searchable Company Combobox Component
+function CompanySearchSelect({ value, onChange }) {
+  const api = useApi();
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get("/companies");
+        setCompanies(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch companies for select", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCompanies();
+  }, [api]);
+
+  const filtered = useMemo(() => {
+    if (!value) return companies;
+    const q = value.toLowerCase();
+    return companies.filter(c => c.name.toLowerCase().includes(q));
+  }, [companies, value]);
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-md overflow-y-auto bg-card p-6 shadow-2xl animate-slide-in-right">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold">Advanced Filters</h2>
-            <p className="text-xs text-muted-foreground">Narrow down leads to focus your work.</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted"><X size={16} /></button>
-        </div>
-        <div className="space-y-5">
-          {[
-            { label: "Lead Status", options: statuses },
-            { label: "Lead Source", options: ["Website", "LinkedIn", "Referral", "Cold Call", "Trade Show"] },
-            { label: "Assigned Salesperson", options: ["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai"] },
-          ].map((g) => (
-            <div key={g.label}>
-              <div className="mb-2 text-xs font-semibold">{g.label}</div>
-              <div className="flex flex-wrap gap-1.5">
-                {g.options.map((o) => (
-                  <button key={o} className="rounded-full border border-border bg-background px-3 py-1 text-xs hover:border-indigo-400 hover:text-indigo-600">{o}</button>
-                ))}
+    <div className="relative">
+      <input
+        required
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Type to search company name…"
+        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+      />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl animate-fade-in">
+            {loading ? (
+              <div className="p-2 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 size={12} className="animate-spin text-indigo-500" /> Loading companies…
               </div>
-            </div>
-          ))}
-          {[
-            { label: "Date Created" },
-            { label: "Last Contacted" },
-            { label: "Next Follow-up" },
-          ].map((g) => (
-            <div key={g.label}>
-              <div className="mb-2 text-xs font-semibold">{g.label}</div>
-              <div className="flex gap-2">
-                <div className="relative flex-1"><Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} /><input type="date" className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs" /></div>
-                <div className="relative flex-1"><Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} /><input type="date" className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-xs" /></div>
+            ) : filtered.length > 0 ? (
+              filtered.map((c) => (
+                <button
+                  key={c._id}
+                  type="button"
+                  onClick={() => {
+                    onChange(c.name);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs text-left hover:bg-muted font-medium cursor-pointer transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 size={13} className="text-indigo-500" />
+                    <span className="font-semibold text-foreground">{c.name}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.industry || "Company"}</span>
+                </button>
+              ))
+            ) : (
+              <div className="p-2.5 text-center text-xs text-muted-foreground">
+                No existing company matching "<span className="font-semibold text-foreground">{value}</span>".
+                <div className="text-[10px] text-indigo-600 mt-0.5 font-medium">New company name will be saved automatically with this lead.</div>
               </div>
-            </div>
-          ))}
-          <div>
-            <div className="mb-2 text-xs font-semibold">Saved Filters</div>
-            <div className="space-y-1.5">
-              {["My hot leads", "Enterprise prospects", "Needs follow-up"].map((s) => (
-                <div key={s} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-xs">
-                  <span>{s}</span><button className="text-muted-foreground hover:text-rose-600"><Trash2 size={12} /></button>
-                </div>
-              ))}
-            </div>
+            )}
           </div>
-        </div>
-        <div className="mt-6 flex gap-2 border-t border-border pt-4">
-          <button className="flex-1 rounded-xl border border-border py-2 text-sm font-medium hover:bg-muted">Reset</button>
-          <button className="flex-1 rounded-xl bg-indigo-500 py-2 text-sm font-medium text-white hover:bg-indigo-600">Apply Filters</button>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
 
-function LeadDetailDrawer({ lead, onClose, onEdit }) {
-  const [tab, setTab] = useState("timeline");
-  const tabs = [
-    { id: "timeline", label: "Timeline" },
-    { id: "notes", label: "Notes" },
-    { id: "meetings", label: "Meetings" },
-    { id: "tasks", label: "Tasks" },
-    { id: "emails", label: "Emails" },
-    { id: "files", label: "Files" },
-    { id: "deals", label: "Deals" },
-  ];
-  const timeline = [
-    { icon: UserIcon, title: "Lead created", subtitle: `Source: ${lead.source}`, time: lead.createdDate, tone: "bg-indigo-500" },
-    { icon: PhoneCall, title: "Called client", subtitle: "12 min call · Discussed pricing", time: "2 days ago", tone: "bg-emerald-500" },
-    { icon: Mail, title: "Sent email", subtitle: "Introduction & product overview", time: "3 days ago", tone: "bg-blue-500" },
-    { icon: StickyNote, title: "Note added", subtitle: "Interested in bulk pricing for Q4", time: "5 days ago", tone: "bg-amber-500" },
-    { icon: FileText, title: "Proposal sent", subtitle: "Q3 supply agreement · v1", time: "1 week ago", tone: "bg-violet-500" },
-    { icon: CheckCircle2, title: "Status changed to Contacted", subtitle: `By ${lead.assignedTo}`, time: "1 week ago", tone: "bg-cyan-500" },
-  ];
+/* ── Full Interactive Lead Detail Drawer ──────────────── */
+function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
+  const [tab, setTab] = useState("overview");
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-2xl overflow-y-auto bg-background shadow-2xl animate-slide-in-right">
-        <div className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
-          <div className="flex items-start gap-4 p-6">
-            <UserAvatar name={lead.name} size="lg" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="truncate text-xl font-bold">{lead.name}</h2>
-                <StatusBadge status={lead.status} />
-              </div>
-              <div className="mt-0.5 text-sm text-muted-foreground">{lead.company} · {lead.email}</div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                <QAction icon={Phone} label="Call" tone="emerald" />
-                <QAction icon={Mail} label="Email" tone="blue" />
-                <QAction icon={MessageSquare} label="WhatsApp" tone="green" />
-                <QAction icon={Calendar} label="Meeting" tone="violet" />
-                <QAction icon={StickyNote} label="Note" tone="amber" />
-                <QAction icon={Handshake} label="Deal" tone="orange" />
-                <QAction icon={CheckCircle2} label="Follow-up Done" tone="indigo" />
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-xl bg-background p-6 shadow-2xl overflow-y-auto animate-slide-left flex flex-col justify-between">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-start justify-between border-b border-border pb-4">
+            <div className="flex items-center gap-3">
+              <UserAvatar name={lead.name} size="lg" />
+              <div>
+                <h2 className="text-xl font-bold text-foreground">{lead.name}</h2>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs font-semibold text-indigo-600">{lead.company}</span>
+                  <span className="text-xs text-muted-foreground">· {lead.id}</span>
+                </div>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted"><X size={16} /></button>
+            <div className="flex items-center gap-1">
+              <button onClick={onEdit} className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer" title="Edit Lead">
+                <Pencil size={16} />
+              </button>
+              <button onClick={onDelete} className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer" title="Delete Lead">
+                <Trash2 size={16} />
+              </button>
+              <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={18} /></button>
+            </div>
           </div>
-          <div className="flex justify-end px-6 pb-2">
-            <button onClick={() => onEdit(lead)} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium hover:border-indigo-400 hover:text-indigo-600">
-              <Pencil size={12} /> Edit Lead
+
+          {/* Quick Action Buttons */}
+          <div className="grid grid-cols-4 gap-2">
+            <button onClick={() => window.open(`tel:${lead.phone}`)} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
+              <PhoneCall size={16} className="text-indigo-500" />
+              <span>Call</span>
+            </button>
+            <button onClick={() => window.open(`mailto:${lead.email}`)} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
+              <Mail size={16} className="text-indigo-500" />
+              <span>Email</span>
+            </button>
+            <button onClick={onEdit} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
+              <Calendar size={16} className="text-indigo-500" />
+              <span>Meeting</span>
+            </button>
+            <button onClick={onEdit} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
+              <Pencil size={16} className="text-indigo-500" />
+              <span>Edit</span>
             </button>
           </div>
-          <div className="flex gap-1 overflow-x-auto px-4">
-            {tabs.map((t) => (
-              <button key={t.id} onClick={() => setTab(t.id)} className={cn("border-b-2 px-3 py-2.5 text-xs font-medium transition", tab === t.id ? "border-indigo-500 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground")}>
-                {t.label}
+
+          {/* Tabs Header */}
+          <div className="flex border-b border-border text-xs font-medium text-muted-foreground">
+            {["overview", "enquiry", "meeting", "notes"].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={cn(
+                  "px-4 py-2 capitalize transition border-b-2 cursor-pointer",
+                  tab === t ? "border-indigo-600 font-bold text-indigo-600" : "border-transparent hover:text-foreground"
+                )}
+              >
+                {t}
               </button>
             ))}
           </div>
+
+          {/* Tab Contents */}
+          {tab === "overview" && (
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 rounded-xl border border-border p-4 bg-muted/30">
+                <InfoItem label="Status" value={lead.status} highlight />
+                <InfoItem label="Assigned Manager" value={lead.assignedTo} />
+                <InfoItem label="Service / Job" value={lead.service} />
+                <InfoItem label="Lead Source" value={lead.source} />
+                <InfoItem label="Phone" value={lead.phone || "Not provided"} />
+                <InfoItem label="Email" value={lead.email || "Not provided"} />
+                <InfoItem label="Created Date" value={lead.createdDate || "Recently"} />
+                <InfoItem label="Next Follow-up" value={lead.nextFollowUp || "None set"} />
+              </div>
+
+              {lead.websiteUrl && (
+                <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                  <div className="flex items-center gap-2">
+                    <Globe size={14} className="text-indigo-500" />
+                    <span className="font-medium">{lead.websiteUrl}</span>
+                  </div>
+                  <a href={lead.websiteUrl.startsWith("http") ? lead.websiteUrl : `https://${lead.websiteUrl}`} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-1">
+                    Visit <ExternalLink size={12} />
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "enquiry" && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded-xl border border-border p-4 space-y-3 bg-muted/30">
+                <InfoItem label="Enquiry Status" value={lead.enquiryStatus || "Open"} highlight />
+                {lead.deadReason && <InfoItem label="Dead Reason" value={lead.deadReason} danger />}
+                <InfoItem label="Company Size" value={lead.companySize || "Not specified"} />
+                <InfoItem label="Region / Country" value={lead.region || "India"} />
+              </div>
+            </div>
+          )}
+
+          {tab === "meeting" && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded-xl border border-border p-4 space-y-3 bg-muted/30">
+                <InfoItem label="Meeting Type" value={lead.meetingType || "Not Scheduled"} />
+                <InfoItem label="Date & Time" value={lead.meetingDate ? new Date(lead.meetingDate).toLocaleString("en-IN") : "Not set"} />
+                <InfoItem label="Mode" value={lead.meetingMode || "Video Call"} />
+                <InfoItem label="Outcome" value={lead.meetingOutcome || "Pending"} />
+              </div>
+            </div>
+          )}
+
+          {tab === "notes" && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded-xl border border-border p-4 bg-muted/30 whitespace-pre-wrap">
+                {lead.notes || "No notes recorded yet for this lead."}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="grid gap-4 p-6 md:grid-cols-[1fr,220px]">
-          <div>
-            {tab === "timeline" && (
-              <ol className="relative space-y-5 border-l-2 border-dashed border-border pl-6">
-                {timeline.map((t, i) => (
-                  <li key={i} className="relative">
-                    <span className={cn("absolute -left-[33px] top-0 grid h-7 w-7 place-items-center rounded-full text-white shadow-md", t.tone)}>
-                      <t.icon size={13} />
-                    </span>
-                    <div className="rounded-xl border border-border bg-card p-3.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold">{t.title}</div>
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground"><Clock size={11} /> {t.time}</div>
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">{t.subtitle}</div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {tab !== "timeline" && (
-              <div className="grid place-items-center rounded-2xl border border-dashed border-border p-12 text-center">
-                <div className="grid h-12 w-12 place-items-center rounded-xl bg-muted"><Sparkles size={18} className="text-muted-foreground" /></div>
-                <div className="mt-3 text-sm font-semibold">Nothing here yet</div>
-                <div className="mt-1 text-xs text-muted-foreground">Add the first {tab} to see it here.</div>
-                <button className="mt-4 rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white">Add {tab.slice(0, -1)}</button>
-              </div>
-            )}
-          </div>
-          <aside className="space-y-3 text-sm">
-            <InfoRow label="Service / Job" value={lead.service || "General Advisory"} highlight />
-            <InfoRow label="Phone" value={lead.phone} />
-            <InfoRow label="Source" value={lead.source} />
-            <InfoRow label="Assigned" value={lead.assignedTo} />
-            <InfoRow label="Created" value={lead.createdDate} />
-            <InfoRow label="Last Contact" value={lead.lastContacted} />
-            <InfoRow label="Next Follow-up" value={lead.nextFollowUp} highlight />
-          </aside>
+        <div className="pt-4 border-t border-border flex justify-end">
+          <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-xs font-medium hover:bg-muted cursor-pointer">Close</button>
         </div>
       </div>
     </div>
   );
 }
 
-function QAction({ icon: Icon, label, tone }) {
-  const tones = {
-    emerald: "hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10",
-    blue: "hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10",
-    green: "hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-500/10",
-    violet: "hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-500/10",
-    amber: "hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-500/10",
-    orange: "hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-500/10",
-    indigo: "hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10",
-  };
-  return (
-    <button className={cn("inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] font-medium transition", tones[tone])}>
-      <Icon size={12} /> {label}
-    </button>
-  );
-}
-
-function InfoRow({ label, value, highlight }) {
+function InfoItem({ label, value, highlight, danger }) {
   return (
     <div>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn("mt-0.5 text-xs font-medium", highlight && "text-indigo-600")}>{value}</div>
+      <div className={cn("mt-0.5 text-xs font-medium", highlight && "text-indigo-600 font-bold", danger && "text-rose-600 font-bold")}>{value}</div>
     </div>
   );
 }
 
-function AddLeadModal({ onClose }) {
+/* ── Add Lead Modal ──────────────────────────────────── */
+function AddLeadModal({ onClose, onSuccess }) {
+  const api = useApi();
+  const [submitting, setSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    company: "",
+    service: serviceNames[0] || "DGFT Advisory",
+    phone: "",
+    email: "",
+    source: "Website",
+    assignedTo: "Nikhil Rao",
+    status: "New",
+    websiteUrl: "",
+    region: "",
+    notes: "",
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await api.post("/leads", formData);
+      toast.success("Lead created successfully");
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error("Create lead error", err);
+      toast.error(err.response?.data?.message || "Failed to create lead");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
-        <div className="flex items-center justify-between">
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
+        <div className="flex items-center justify-between border-b border-border pb-3">
           <div>
             <h2 className="text-lg font-bold">Add New Lead</h2>
             <p className="text-xs text-muted-foreground">Capture a prospect and start engaging.</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted"><X size={16} /></button>
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
-        <form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
-          <Field label="Lead Name *" placeholder="e.g. Priya Patel" required />
-          <Field label="Company *" placeholder="e.g. Orion Exports" required />
-          <Field label="Service / Job *" as="select" options={serviceNames} required />
-          <Field label="Phone" placeholder="+91 90000 12345" />
-          <Field label="Email *" placeholder="name@company.com" type="email" required />
-          <Field label="Source" placeholder="Website" as="select" options={["Website", "LinkedIn", "Referral", "Cold Call", "Trade Show"]} />
-          <Field label="Assigned To" placeholder="Nikhil Rao" as="select" options={["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai"]} />
-          <Field label="Status" placeholder="New" as="select" options={statuses} />
-          <Field label="Follow-up Date" type="date" />
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold">Notes</label>
-            <textarea rows={3} placeholder="Any context worth remembering…" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-500/20" />
+        <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Lead Name *</label>
+              <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Priya Patel" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Company Name *</label>
+              <CompanySearchSelect
+                value={formData.company}
+                onChange={(val) => setFormData({ ...formData, company: val })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Service / Job *</label>
+              <select value={formData.service} onChange={(e) => setFormData({ ...formData, service: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                {serviceNames.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Phone</label>
+              <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+91 90000 12345" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Email *</label>
+              <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="name@company.com" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Source</label>
+              <select value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                {["Website", "LinkedIn", "Referral", "Cold Call", "Trade Show", "Partner", "Google Ads", "Other"].map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Assigned To</label>
+              <select value={formData.assignedTo} onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                {["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai"].map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Status</label>
+              <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                {statuses.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Website URL</label>
+              <input value={formData.websiteUrl} onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })} placeholder="https://example.com" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Region / Country</label>
+              <input value={formData.region} onChange={(e) => setFormData({ ...formData, region: e.target.value })} placeholder="e.g. UAE, Singapore" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+            </div>
           </div>
-          <div className="mt-2 flex justify-end gap-2 sm:col-span-2">
-            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted">Cancel</button>
-            <button type="submit" className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md">Create Lead</button>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">Notes</label>
+            <textarea rows={3} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Any context worth remembering…" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">Cancel</button>
+            <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50">
+              {submitting && <Loader2 size={14} className="animate-spin" />} Create Lead
+            </button>
           </div>
         </form>
       </div>
@@ -558,67 +763,124 @@ function AddLeadModal({ onClose }) {
   );
 }
 
-function Field({ label, placeholder, type = "text", required, as, options }) {
-  const base = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-500/20";
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-semibold">{label}</label>
-      {as === "select" ? (
-        <select className={base} required={required}>
-          {options?.map((o) => <option key={o}>{o}</option>)}
-        </select>
-      ) : (
-        <input type={type} placeholder={placeholder} className={base} required={required} />
-      )}
-    </div>
-  );
-}
+/* ── Rich Multi-Section Edit Lead Modal ───────────────── */
+function EditLeadModal({ lead, onClose, onSuccess }) {
+  const api = useApi();
+  const [submitting, setSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: lead?.name || "",
+    company: lead?.company || "",
+    service: lead?.service || serviceNames[0],
+    phone: lead?.phone || "",
+    email: lead?.email || "",
+    source: lead?.source || "Website",
+    assignedTo: lead?.assignedTo || "Nikhil Rao",
+    status: lead?.status || "New",
+    nextFollowUp: lead?.nextFollowUp || "",
+    enquiryStatus: lead?.enquiryStatus || "Open",
+    deadReason: lead?.deadReason || "",
+    websiteUrl: lead?.websiteUrl || "",
+    companySize: lead?.companySize || "Not specified",
+    region: lead?.region || "",
+    meetingType: lead?.meetingType || "Not Scheduled",
+    meetingDate: lead?.meetingDate || "",
+    meetingMode: lead?.meetingMode || "Video Call",
+    meetingOutcome: lead?.meetingOutcome || "Pending",
+    notes: lead?.notes || "",
+  });
 
-const ENQUIRY_STATUSES = ["Open", "In Progress", "Awaiting Response", "On Hold", "Qualified", "Closed - Won", "Closed - Dead"];
-const DEAD_REASONS = ["Budget Constraints", "Chose Competitor", "No Response", "Not a Fit", "Timing Issues", "Duplicate Lead", "Invalid Contact", "Other"];
-const MEETING_TYPES = ["Not Scheduled", "Discovery Call", "Product Demo", "Proposal Review", "Negotiation", "Site Visit", "Follow-up", "Closed"];
+  const isDead = formData.enquiryStatus === "Closed - Dead";
 
-function EditLeadModal({ lead, onClose }) {
-  const [enquiryStatus, setEnquiryStatus] = useState("Open");
-  const [deadReason, setDeadReason] = useState("");
-  const base = "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-500/20";
-  const isDead = enquiryStatus === "Closed - Dead";
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      if (lead._id) {
+        await api.put(`/leads/${lead._id}`, formData);
+        toast.success("Lead updated successfully");
+      }
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error("Update lead error", err);
+      toast.error(err.response?.data?.message || "Failed to update lead");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-3">
-            <UserAvatar name={lead.name} size="md" />
+            <UserAvatar name={formData.name} size="md" />
             <div>
               <h2 className="text-lg font-bold">Edit Lead</h2>
               <p className="text-xs text-muted-foreground">{lead.name} · {lead.company} · {lead.id}</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted"><X size={16} /></button>
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
 
-        <form className="mt-5 space-y-6" onSubmit={(e) => { e.preventDefault(); onClose(); }}>
+        <form className="mt-5 space-y-6" onSubmit={handleSubmit}>
+          {/* Section 1: Basic Details */}
           <section>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Basic Details</div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Lead Name" placeholder={lead.name} />
-              <Field label="Company" placeholder={lead.company} />
-              <Field label="Service / Job" as="select" options={serviceNames} defaultValue={lead.service} />
-              <Field label="Phone" placeholder={lead.phone} />
-              <Field label="Email" type="email" placeholder={lead.email} />
-              <Field label="Source" as="select" options={["Website", "LinkedIn", "Referral", "Cold Call", "Trade Show"]} />
-              <Field label="Assigned To" as="select" options={["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai"]} />
-              <Field label="Lead Status" as="select" options={statuses} />
-              <Field label="Next Follow-up" type="date" />
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Lead Name *</label>
+                <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Company Name *</label>
+                <CompanySearchSelect
+                  value={formData.company}
+                  onChange={(val) => setFormData({ ...formData, company: val })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Service / Job *</label>
+                <select value={formData.service} onChange={(e) => setFormData({ ...formData, service: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {serviceNames.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Phone</label>
+                <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Email *</label>
+                <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Source</label>
+                <select value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {["Website", "LinkedIn", "Referral", "Cold Call", "Trade Show", "Partner", "Google Ads", "Other"].map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Assigned To</label>
+                <select value={formData.assignedTo} onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai"].map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Lead Status</label>
+                <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {statuses.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
             </div>
           </section>
 
+          {/* Section 2: Enquiry */}
           <section>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Enquiry</div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Enquiry Status & Dead Reason</div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-semibold">Enquiry Status</label>
-                <select value={enquiryStatus} onChange={(e) => setEnquiryStatus(e.target.value)} className={base}>
+                <select value={formData.enquiryStatus} onChange={(e) => setFormData({ ...formData, enquiryStatus: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
                   {ENQUIRY_STATUSES.map((o) => <option key={o}>{o}</option>)}
                 </select>
               </div>
@@ -627,10 +889,10 @@ function EditLeadModal({ lead, onClose }) {
                   Enquiry Dead Reason {isDead && <span className="text-rose-500">*</span>}
                 </label>
                 <select
-                  value={deadReason}
-                  onChange={(e) => setDeadReason(e.target.value)}
+                  value={formData.deadReason}
+                  onChange={(e) => setFormData({ ...formData, deadReason: e.target.value })}
                   disabled={!isDead}
-                  className={cn(base, !isDead && "cursor-not-allowed opacity-50")}
+                  className={cn("w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400", !isDead && "cursor-not-allowed opacity-50")}
                 >
                   <option value="">Select reason…</option>
                   {DEAD_REASONS.map((o) => <option key={o}>{o}</option>)}
@@ -640,40 +902,76 @@ function EditLeadModal({ lead, onClose }) {
             </div>
           </section>
 
+          {/* Section 3: Website Details */}
           <section>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Website Details</div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Website & Company Details</div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className="mb-1 block text-xs font-semibold">Website URL</label>
                 <div className="relative">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
-                  <input type="url" placeholder="https://example.com" className={cn(base, "pl-9")} />
+                  <input
+                    type="url"
+                    value={formData.websiteUrl}
+                    onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
+                    placeholder="https://example.com"
+                    className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400"
+                  />
                 </div>
-                <p className="mt-1 text-[10px] text-muted-foreground">Leave blank if not available</p>
               </div>
-              <Field label="Company Size" as="select" options={["Not specified", "1-10", "11-50", "51-200", "201-500", "500+"]} />
-              <Field label="Region / Country" placeholder="e.g. UAE, Singapore" />
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Company Size</label>
+                <select value={formData.companySize} onChange={(e) => setFormData({ ...formData, companySize: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {["Not specified", "1-10", "11-50", "51-200", "201-500", "500+"].map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Region / Country</label>
+                <input value={formData.region} onChange={(e) => setFormData({ ...formData, region: e.target.value })} placeholder="e.g. UAE, Singapore" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              </div>
             </div>
           </section>
 
+          {/* Section 4: Meeting */}
           <section>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Meeting</div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Meeting Schedule</div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Meeting Type" as="select" options={MEETING_TYPES} />
-              <Field label="Meeting Date & Time" type="datetime-local" />
-              <Field label="Meeting Mode" as="select" options={["In Person", "Video Call", "Phone Call", "On-site Visit"]} />
-              <Field label="Meeting Outcome" as="select" options={["Pending", "Positive", "Neutral", "Needs Follow-up", "Not Interested"]} />
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Meeting Type</label>
+                <select value={formData.meetingType} onChange={(e) => setFormData({ ...formData, meetingType: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {MEETING_TYPES.map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Meeting Date & Time</label>
+                <input type="datetime-local" value={formData.meetingDate} onChange={(e) => setFormData({ ...formData, meetingDate: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Meeting Mode</label>
+                <select value={formData.meetingMode} onChange={(e) => setFormData({ ...formData, meetingMode: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {["In Person", "Video Call", "Phone Call", "On-site Visit"].map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Meeting Outcome</label>
+                <select value={formData.meetingOutcome} onChange={(e) => setFormData({ ...formData, meetingOutcome: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                  {["Pending", "Positive", "Neutral", "Needs Follow-up", "Not Interested"].map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </div>
             </div>
           </section>
 
+          {/* Section 5: Notes */}
           <section>
-            <label className="mb-1 block text-xs font-semibold">Notes</label>
-            <textarea rows={3} placeholder="Update notes about this lead…" className={base} />
+            <label className="mb-1 block text-xs font-semibold">Notes & Engagement Context</label>
+            <textarea rows={3} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Update notes about this lead…" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
           </section>
 
           <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted">Cancel</button>
-            <button type="submit" className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md">Save Changes</button>
+            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">Cancel</button>
+            <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50">
+              {submitting && <Loader2 size={14} className="animate-spin" />} Save Changes
+            </button>
           </div>
         </form>
       </div>

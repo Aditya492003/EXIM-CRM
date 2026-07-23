@@ -65,6 +65,33 @@ const LeadSchema = new Schema({
   notes: {
     type: String
   },
+  enquiryStatus: {
+    type: String
+  },
+  deadReason: {
+    type: String
+  },
+  websiteUrl: {
+    type: String
+  },
+  companySize: {
+    type: String
+  },
+  region: {
+    type: String
+  },
+  meetingType: {
+    type: String
+  },
+  meetingDate: {
+    type: Date
+  },
+  meetingMode: {
+    type: String
+  },
+  meetingOutcome: {
+    type: String
+  },
   isFavorite: {
     type: Boolean,
     default: false
