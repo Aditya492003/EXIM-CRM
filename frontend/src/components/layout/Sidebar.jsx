@@ -1,9 +1,11 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Users, Building2, Handshake, Sparkles, FileText, LayoutTemplate, Briefcase, UserCheck, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { Briefcase, Building2, FileText, Handshake, LayoutDashboard, LayoutTemplate, Sparkles, UserCheck, Users, Video } from "lucide-react";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  
   { to: "/leads", label: "Leads", icon: Users },
   { to: "/contacts", label: "Contacts", icon: UserCheck },
   { to: "/meetings", label: "Meetings", icon: Video },
@@ -28,12 +30,12 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-5">
+      <nav className="flex-1 space-y-1 px-3 py-5 overflow-y-auto">
         <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
           Workspace
         </div>
         {nav.map((item) => {
-          const active = pathname === item.to || (item.to !== "/" && pathname.startsWith(item.to));
+          const active = pathname === item.to || (item.to !== "/" && item.to !== "/landing" && pathname.startsWith(item.to));
           return (
             <Link
               key={item.to}
@@ -53,11 +55,24 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-4">
-        <div className="rounded-2xl bg-gradient-to-br from-indigo-500/15 to-violet-500/10 p-4 ring-1 ring-indigo-400/20">
+      <div className="border-t border-sidebar-border p-4 space-y-3">
+        <SignedIn>
+          <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent/50 p-2.5">
+            <UserButton showName />
+          </div>
+        </SignedIn>
+        <SignedOut>
+          <SignInButton mode="modal">
+            <button className="w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition">
+              Sign In to Account
+            </button>
+          </SignInButton>
+        </SignedOut>
+
+        <div className="rounded-2xl bg-gradient-to-br from-indigo-500/15 to-violet-500/10 p-3 ring-1 ring-indigo-400/20">
           <div className="text-xs font-semibold text-white">Pipeline Health</div>
           <div className="mt-1 text-[11px] text-sidebar-foreground/60">You're 82% to quota this month.</div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/10">
             <div className="h-full w-[82%] rounded-full bg-gradient-to-r from-indigo-400 to-violet-400" />
           </div>
         </div>

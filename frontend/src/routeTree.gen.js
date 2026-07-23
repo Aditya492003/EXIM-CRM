@@ -1,4 +1,5 @@
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as LandingRouteImport } from "./routes/landing";
 import { Route as ContactsRouteImport } from "./routes/contacts";
 import { Route as MeetingsRouteImport } from "./routes/meetings";
 import { Route as LeadsRouteImport } from "./routes/leads";
@@ -10,6 +11,11 @@ import { Route as ProposalsIndexRouteImport } from "./routes/proposals.index";
 import { Route as ProposalsTemplatesRouteImport } from "./routes/proposals.templates";
 import { Route as ProposalsNewRouteImport } from "./routes/proposals.new";
 
+const LandingRoute = LandingRouteImport.update({
+  id: "/landing",
+  path: "/landing",
+  getParentRoute: () => rootRouteImport,
+});
 const ContactsRoute = ContactsRouteImport.update({
   id: "/contacts",
   path: "/contacts",
@@ -63,6 +69,7 @@ const ProposalsNewRoute = ProposalsNewRouteImport.update({
 
 const rootRouteChildren = {
   IndexRoute: IndexRoute,
+  LandingRoute: LandingRoute,
   ContactsRoute: ContactsRoute,
   MeetingsRoute: MeetingsRoute,
   CompaniesRoute: CompaniesRoute,

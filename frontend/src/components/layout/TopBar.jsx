@@ -1,6 +1,7 @@
-import { Bell, Plus, Search, Moon, Sun, LayoutDashboard, Users, Building2, Handshake } from "lucide-react";
+import { Bell, Plus, Search, Moon, Sun, LayoutDashboard, Users, Building2, Handshake, Globe } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { SignedIn, SignedOut, UserButton, SignInButton, SignUpButton, useUser } from "@clerk/clerk-react";
 import { UserAvatar } from "@/components/crm/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,6 +9,7 @@ import { cn } from "@/lib/utils";
 export function TopBar() {
   const [dark, setDark] = useState(false);
   const [openSearch, setOpenSearch] = useState(false);
+  const { user } = useUser();
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -37,7 +39,15 @@ export function TopBar() {
           {openSearch && <SearchPalette onClose={() => setOpenSearch(false)} />}
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-2">
+          <Link
+            to="/landing"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium shadow-sm hover:bg-muted"
+          >
+            <Globe size={14} className="text-indigo-500" />
+            <span>Landing Page</span>
+          </Link>
+
           <Button variant="ghost" size="icon" className="rounded-xl md:hidden" onClick={() => setOpenSearch(true)}>
             <Search size={18} />
           </Button>
@@ -52,12 +62,28 @@ export function TopBar() {
             <Plus size={16} className="mr-1" />
             <span className="hidden sm:inline">Quick Add</span>
           </Button>
-          <div className="ml-1 flex items-center gap-2.5 rounded-xl border border-border bg-card px-2 py-1 shadow-sm">
-            <UserAvatar name="Nikhil Rao" size="sm" />
-            <div className="hidden pr-1 md:block">
-              <div className="text-xs font-semibold leading-tight">Nikhil Rao</div>
-              <div className="text-[10px] leading-tight text-muted-foreground">Sales Lead</div>
-            </div>
+
+          {/* Clerk Auth Managed Button */}
+          <div className="ml-1 flex items-center gap-2">
+            <SignedIn>
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 shadow-sm">
+                <UserButton showName />
+              </div>
+            </SignedIn>
+            <SignedOut>
+              <div className="flex items-center gap-1.5">
+                <SignInButton mode="modal">
+                  <Button variant="outline" size="sm" className="rounded-xl text-xs font-semibold">
+                    Sign In
+                  </Button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <Button size="sm" className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white shadow-md">
+                    Get Started
+                  </Button>
+                </SignUpButton>
+              </div>
+            </SignedOut>
           </div>
         </div>
       </div>

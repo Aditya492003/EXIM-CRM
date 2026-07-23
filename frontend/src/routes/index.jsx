@@ -1,4 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useAuth } from "@clerk/clerk-react";
+import { LandingPage } from "./landing";
 import {
   ArrowUpRight,
   Building2,
@@ -44,7 +46,6 @@ import {
   proposalTotals,
   totals,
 } from "@/data/dummy";
-import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -63,6 +64,23 @@ const kpis = [
 ];
 
 function DashboardPage() {
+  const { isSignedIn, isLoaded } = useAuth();
+
+  if (!isLoaded) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#FDFBF7]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+          <p className="text-xs font-semibold text-slate-600">Loading Exim Nexus…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return <LandingPage />;
+  }
+
   return (
     <AppLayout>
       <div className="space-y-6">
