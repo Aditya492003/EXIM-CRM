@@ -113,3 +113,45 @@ export const exportCompaniesCSV = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc  Bulk import companies from CSV data
+// @route POST /api/companies/bulk
+export const importCompaniesBulk = async (req, res, next) => {
+  try {
+    const { companies } = req.body;
+    if (!Array.isArray(companies) || companies.length === 0) {
+      return res.status(400).json({ success: false, message: "No company data provided" });
+    }
+
+    const formatted = companies
+      .map((c) => ({
+        name: c.name?.trim(),
+        email: c.email?.trim() || "",
+        phone: c.phone?.trim() || "",
+        industry: c.industry?.trim() || "General",
+        primaryContact: c.primaryContact?.trim() || "",
+        website: c.website?.trim() || "",
+        address: c.address?.trim() || "",
+        gstin: c.gstin?.trim() || "",
+        pan: c.pan?.trim() || "",
+        notes: c.notes?.trim() || "",
+        status: c.status || "Active",
+        createdByClerkId: req.user?.clerkId,
+      }))
+      .filter((c) => c.name);
+
+    if (formatted.length === 0) {
+      return res.status(400).json({ success: false, message: "No valid company records found" });
+    }
+
+    const created = await Company.insertMany(formatted);
+
+    res.status(201).json({
+      success: true,
+      count: created.length,
+      data: created,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

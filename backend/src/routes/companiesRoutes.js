@@ -8,14 +8,16 @@ import {
   updateCompany,
   deleteCompany,
   exportCompaniesCSV,
+  importCompaniesBulk,
 } from "../controllers/companiesController.js";
 
 const router = express.Router();
 
 router.use(requireAuth);
 
-// CSV export must be before /:id to avoid "export" being treated as an id param
+// Special routes before /:id
 router.get("/export/csv", exportCompaniesCSV);
+router.post("/bulk", importCompaniesBulk);
 
 router.route("/").get(getCompanies).post(upload.single("logo"), createCompany);
 router.route("/:id")

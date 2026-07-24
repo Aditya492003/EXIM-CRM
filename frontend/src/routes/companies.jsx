@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
-  Building2, ChevronRight, Download, FileText, Filter, Mail, MoreHorizontal,
-  Phone, Plus, Search, Upload, X, TrendingUp, DollarSign, Handshake, Pencil, Trash2, CheckCircle2, Loader2,
+  Building2, Download, Filter, Mail, Phone, Plus, Search, Upload, X,
+  Pencil, Trash2, CheckCircle2, Loader2, Globe, FileText, ExternalLink,
+  ShieldCheck, AlertCircle, FileSpreadsheet, Eye
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
-import { companiesData as initialCompanies } from "@/data/dummy";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
@@ -15,10 +15,16 @@ export const Route = createFileRoute("/companies")({
   component: CompaniesPage,
 });
 
-const industries = ["Textiles", "Electronics", "Pharmaceuticals", "Agriculture", "Automotive", "Chemicals", "Machinery", "Food & Beverage", "Metals", "Consumer Goods"];
-const managers = ["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai", "Varun Iyer", "Zara Khan"];
+const industriesList = [
+  "Textiles", "Electronics", "Pharmaceuticals", "Agriculture", "Automotive",
+  "Chemicals", "Machinery", "Food & Beverage", "Metals", "Consumer Goods", "Services", "Other"
+];
 
-function CompaniesPage() {
+const managersList = [
+  "Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai", "Varun Iyer", "Zara Khan"
+];
+
+export default function CompaniesPage() {
   const api = useApi();
   const [companiesList, setCompaniesList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +33,6 @@ function CompaniesPage() {
   const [editing, setEditing] = useState(null);
   const [status, setStatus] = useState("All");
   const [industryFilter, setIndustryFilter] = useState("All");
-  const [managerFilter, setManagerFilter] = useState("All");
   const [openAdd, setOpenAdd] = useState(false);
 
   const fetchCompanies = useCallback(async () => {
@@ -36,24 +41,30 @@ function CompaniesPage() {
       const res = await api.get("/companies");
       const data = res.data?.data || [];
 
-      setCompaniesList(data.map(c => ({
-        id: c.code || c._id,
-        _id: c._id,
-        name: c.name,
-        industry: c.industry || "Textiles",
-        primaryContact: c.primaryContact || "",
-        phone: c.phone || "",
-        email: c.email || "",
-        assignedManager: c.assignedManager || "Nikhil Rao",
-        activeDeals: c.activeDeals || 0,
-        status: c.status || "Active",
-        revenue: c.revenue ? `₹${(c.revenue / 100000).toFixed(1)}L` : "₹0",
-        gstin: c.gstin || "",
-        pan: c.pan || "",
-        website: c.website || ""
-      })));
+      setCompaniesList(
+        data.map((c) => ({
+          id: c.code || c._id,
+          _id: c._id,
+          name: c.name,
+          industry: c.industry || "General",
+          primaryContact: c.primaryContact || "",
+          phone: c.phone || "",
+          email: c.email || "",
+          assignedManager: c.assignedManager || "Nikhil Rao",
+          activeDeals: c.activeDeals || 0,
+          status: c.status || "Active",
+          revenue: c.revenue || 0,
+          gstin: c.gstin || "",
+          pan: c.pan || "",
+          website: c.website || "",
+          address: c.address || "",
+          notes: c.notes || "",
+          createdDate: c.createdDate ? new Date(c.createdDate).toLocaleDateString("en-IN") : "",
+        }))
+      );
     } catch (err) {
       console.error("Failed to load companies", err);
+      toast.error("Failed to load companies list");
       setCompaniesList([]);
     } finally {
       setLoading(false);
@@ -65,15 +76,15 @@ function CompaniesPage() {
   }, [fetchCompanies]);
 
   const handleDeleteCompany = async (company) => {
-    if (!confirm(`Delete company "${company.name}"?`)) return;
+    if (!confirm(`Are you sure you want to delete "${company.name}"?`)) return;
     try {
       if (company._id) {
         await api.delete(`/companies/${company._id}`);
       }
-      setCompaniesList(prev => prev.filter(c => (c._id || c.id) !== (company._id || company.id)));
-      setActive(null);
-      setEditing(null);
-      toast.success("Company deleted");
+      setCompaniesList((prev) => prev.filter((c) => (c._id || c.id) !== (company._id || company.id)));
+      if (active && (active._id === company._id || active.id === company.id)) setActive(null);
+      if (editing && (editing._id === company._id || editing.id === company.id)) setEditing(null);
+      toast.success("Company deleted successfully");
     } catch (err) {
       toast.error("Failed to delete company");
     }
@@ -99,29 +110,29 @@ function CompaniesPage() {
     return companiesList.filter((c) => {
       if (status !== "All" && c.status !== status) return false;
       if (industryFilter !== "All" && c.industry !== industryFilter) return false;
-      if (managerFilter !== "All" && c.assignedManager !== managerFilter) return false;
       if (search) {
         const s = search.toLowerCase();
         return (
           c.name.toLowerCase().includes(s) ||
-          c.industry.toLowerCase().includes(s) ||
-          c.primaryContact.toLowerCase().includes(s) ||
-          c.email.toLowerCase().includes(s)
+          c.phone.toLowerCase().includes(s) ||
+          c.email.toLowerCase().includes(s) ||
+          c.industry.toLowerCase().includes(s)
         );
       }
       return true;
     });
-  }, [companiesList, search, status, industryFilter, managerFilter]);
+  }, [companiesList, search, status, industryFilter]);
 
   return (
     <AppLayout>
       <div className="space-y-5">
+        {/* Page Header */}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Accounts Directory</div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Companies & Clients</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filtered.length} of {companiesList.length} accounts · Track organization profiles and contacts
+              {filtered.length} of {companiesList.length} accounts · Manage companies and import CRM leads
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -144,8 +155,8 @@ function CompaniesPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search companies, industry, contact…"
-              className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400"
+              placeholder="Search by company name, phone, or email…"
+              className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
             />
           </div>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none">
@@ -154,88 +165,288 @@ function CompaniesPage() {
             <option value="Prospect">Prospect</option>
             <option value="Inactive">Inactive</option>
           </select>
+          <select value={industryFilter} onChange={(e) => setIndustryFilter(e.target.value)} className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none">
+            <option value="All">All Industries</option>
+            {industriesList.map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
         </div>
 
-        {/* Table */}
+        {/* Company List Table (Showing Company Name, Phone, Email & Actions) */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Company Name</th>
-                  <th className="px-4 py-3">Industry</th>
-                  <th className="px-4 py-3">Primary Contact</th>
-                  <th className="px-4 py-3">Manager</th>
-                  <th className="px-4 py-3">Active Deals</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
-                      <div className="mt-2 text-xs">Loading companies from MongoDB...</div>
+                      <div className="mt-2 text-xs">Loading companies from database...</div>
                     </td>
                   </tr>
-                ) : filtered.map((c) => (
-                  <tr key={c._id || c.id} className="group hover:bg-muted/40 transition">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="grid h-8 w-8 place-items-center rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs dark:bg-indigo-500/10 dark:text-indigo-300">
-                          {c.name.substring(0, 2).toUpperCase()}
+                ) : filtered.length > 0 ? (
+                  filtered.map((c) => (
+                    <tr key={c._id || c.id} className="group hover:bg-muted/40 transition">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs dark:bg-indigo-500/10 dark:text-indigo-300">
+                            {c.name ? c.name.substring(0, 2).toUpperCase() : "CO"}
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => setActive(c)}
+                              className="font-semibold text-foreground hover:text-indigo-600 text-left cursor-pointer underline decoration-indigo-200"
+                            >
+                              {c.name}
+                            </button>
+                            <div className="text-[11px] text-muted-foreground">
+                              {c.industry} {c.primaryContact ? `· Contact: ${c.primaryContact}` : ""}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-semibold text-foreground">{c.name}</div>
-                          <div className="text-[11px] text-muted-foreground">{c.id}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-medium">{c.phone || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{c.email || "—"}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                          <button
+                            onClick={() => setActive(c)}
+                            title="View Detail Drawer"
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => setEditing(c)}
+                            title="Edit Company"
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCompany(c)}
+                            title="Delete Company"
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs">{c.industry}</td>
-                    <td className="px-4 py-3 text-xs font-medium">{c.primaryContact}</td>
-                    <td className="px-4 py-3 text-xs">{c.assignedManager}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-600">{c.activeDeals}</td>
-                    <td className="px-4 py-3">
-                      <span className={cn(
-                        "rounded-md px-2 py-0.5 text-[11px] font-medium",
-                        c.status === "Active" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-muted text-muted-foreground"
-                      )}>
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => handleDeleteCompany(c)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
-                        <Trash2 size={14} />
-                      </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="p-12 text-center text-muted-foreground">
+                      <Building2 size={24} className="mx-auto text-muted-foreground/60" />
+                      <div className="mt-2 font-medium text-sm">No companies match criteria</div>
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
+      {/* Slide-over Detail Drawer */}
+      {active && (
+        <CompanyDetailDrawer
+          company={active}
+          onClose={() => setActive(null)}
+          onEdit={() => { setEditing(active); setActive(null); }}
+          onDelete={() => handleDeleteCompany(active)}
+        />
+      )}
+
+      {/* Add Company Modal (With Professional CSV Import Workflow) */}
       {openAdd && <AddCompanyModal onClose={() => setOpenAdd(false)} onSuccess={fetchCompanies} />}
+
+      {/* Edit Company Modal (Full manual edit sections) */}
+      {editing && <EditCompanyModal company={editing} onClose={() => setEditing(null)} onSuccess={fetchCompanies} />}
     </AppLayout>
   );
 }
 
+/* ── Company Detail Drawer (Just like Lead Detail Drawer) ────── */
+function CompanyDetailDrawer({ company, onClose, onEdit, onDelete }) {
+  const [tab, setTab] = useState("overview");
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-xl bg-background p-6 shadow-2xl overflow-y-auto animate-slide-left flex flex-col justify-between">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-start justify-between border-b border-border pb-4">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white font-bold text-base shadow-md">
+                {company.name ? company.name.substring(0, 2).toUpperCase() : "CO"}
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-foreground">{company.name}</h2>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs font-semibold text-indigo-600">{company.industry}</span>
+                  <span className="text-xs text-muted-foreground">· Status: {company.status}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button onClick={onEdit} className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer" title="Edit Company">
+                <Pencil size={16} />
+              </button>
+              <button onClick={onDelete} className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer" title="Delete Company">
+                <Trash2 size={16} />
+              </button>
+              <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={18} /></button>
+            </div>
+          </div>
+
+          {/* Quick Action Buttons */}
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => company.phone && window.open(`tel:${company.phone}`)}
+              disabled={!company.phone}
+              className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer disabled:opacity-40"
+            >
+              <Phone size={16} className="text-indigo-500" />
+              <span>Call</span>
+            </button>
+            <button
+              onClick={() => company.email && window.open(`mailto:${company.email}`)}
+              disabled={!company.email}
+              className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer disabled:opacity-40"
+            >
+              <Mail size={16} className="text-indigo-500" />
+              <span>Email</span>
+            </button>
+            <button
+              onClick={() => company.website && window.open(company.website.startsWith("http") ? company.website : `https://${company.website}`, "_blank")}
+              disabled={!company.website}
+              className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer disabled:opacity-40"
+            >
+              <Globe size={16} className="text-indigo-500" />
+              <span>Website</span>
+            </button>
+            <button onClick={onEdit} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
+              <Pencil size={16} className="text-indigo-500" />
+              <span>Edit</span>
+            </button>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-border text-xs font-medium text-muted-foreground">
+            {["overview", "compliance", "deals", "notes"].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={cn(
+                  "px-4 py-2 capitalize transition border-b-2 cursor-pointer",
+                  tab === t ? "border-indigo-600 font-bold text-indigo-600" : "border-transparent hover:text-foreground"
+                )}
+              >
+                {t === "compliance" ? "Tax & Compliance" : t}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          {tab === "overview" && (
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 rounded-xl border border-border p-4 bg-muted/30">
+                <InfoItem label="Company Name" value={company.name} highlight />
+                <InfoItem label="Industry" value={company.industry} />
+                <InfoItem label="Primary Contact" value={company.primaryContact || "Not assigned"} />
+                <InfoItem label="Status" value={company.status} />
+                <InfoItem label="Phone" value={company.phone || "Not provided"} />
+                <InfoItem label="Email" value={company.email || "Not provided"} />
+                <InfoItem label="Assigned Manager" value={company.assignedManager || "Nikhil Rao"} />
+                <InfoItem label="Created Date" value={company.createdDate || "Recently"} />
+              </div>
+            </div>
+          )}
+
+          {tab === "compliance" && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded-xl border border-border p-4 space-y-3 bg-muted/30">
+                <InfoItem label="GSTIN" value={company.gstin || "Not provided"} />
+                <InfoItem label="PAN" value={company.pan || "Not provided"} />
+                <InfoItem label="Address" value={company.address || "Not provided"} />
+                <InfoItem label="Website URL" value={company.website || "Not provided"} />
+              </div>
+            </div>
+          )}
+
+          {tab === "deals" && (
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 rounded-xl border border-border p-4 bg-muted/30">
+                <InfoItem label="Active Deals" value={company.activeDeals || 0} highlight />
+                <InfoItem label="Est. Revenue" value={typeof company.revenue === "number" ? `₹${(company.revenue / 100000).toFixed(1)}L` : company.revenue || "₹0"} />
+              </div>
+            </div>
+          )}
+
+          {tab === "notes" && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded-xl border border-border p-4 bg-muted/30 whitespace-pre-wrap">
+                {company.notes || "No notes recorded yet for this company."}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="pt-4 border-t border-border flex justify-end">
+          <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-xs font-medium hover:bg-muted cursor-pointer">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoItem({ label, value, highlight }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={cn("mt-0.5 text-xs font-medium", highlight && "text-indigo-600 font-bold")}>{value}</div>
+    </div>
+  );
+}
+
+/* ── Add Company Modal with Manual Entry + CSV Import Workflow ────── */
 function AddCompanyModal({ onClose, onSuccess }) {
   const api = useApi();
+  const [tab, setTab] = useState("manual"); // 'manual' | 'import'
   const [submitting, setSubmitting] = useState(false);
+
+  // Manual Form State
   const [formData, setFormData] = useState({
     name: "",
-    industry: industries[0],
+    industry: industriesList[0],
     primaryContact: "",
     phone: "",
     email: "",
-    assignedManager: managers[0],
+    website: "",
+    address: "",
+    gstin: "",
+    pan: "",
+    assignedManager: managersList[0],
     status: "Active",
+    notes: "",
   });
 
-  const handleSubmit = async (e) => {
+  // CSV Import State
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvRows, setCsvRows] = useState([]); // parsed company records
+  const [parsing, setParsing] = useState(false);
+
+  const handleManualSubmit = async (e) => {
     e.preventDefault();
     try {
       setSubmitting(true);
@@ -251,48 +462,693 @@ function AddCompanyModal({ onClose, onSuccess }) {
     }
   };
 
+  // Helper functions for selecting single email and single phone if multiple exist in CSV cell
+  const extractFirstEmail = (val) => {
+    if (!val) return "";
+    const parts = val.split(/[,;\/\s\n]+/);
+    for (const p of parts) {
+      const trimmed = p.trim();
+      if (trimmed.includes("@") && trimmed.includes(".")) {
+        return trimmed;
+      }
+    }
+    return parts[0]?.trim() || val.trim();
+  };
+
+  const extractFirstPhone = (val) => {
+    if (!val) return "";
+    const parts = val.split(/[,;\/\n]|\s+or\s+/i);
+    for (const p of parts) {
+      const trimmed = p.trim();
+      if (trimmed) return trimmed;
+    }
+    return val.trim();
+  };
+
+  // Helper function to parse CSV file content
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvFile(file);
+    setParsing(true);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result || "";
+        const { headers, rows } = parseCSVText(text);
+
+        if (rows.length === 0) {
+          toast.error("CSV file appears to be empty");
+          setCsvRows([]);
+          setParsing(false);
+          return;
+        }
+
+        // Map column indexes
+        const colMap = mapHeaders(headers);
+
+        const records = rows.map((r, index) => {
+          const rawName = colMap.name !== undefined ? r[colMap.name] || "" : r[0] || "";
+          const rawEmail = colMap.email !== undefined ? r[colMap.email] || "" : "";
+          const rawPhone = colMap.phone !== undefined ? r[colMap.phone] || "" : "";
+          const rawIndustry = colMap.industry !== undefined ? r[colMap.industry] || "" : "";
+          const rawContact = colMap.primaryContact !== undefined ? r[colMap.primaryContact] || "" : "";
+          const rawWebsite = colMap.website !== undefined ? r[colMap.website] || "" : "";
+          const rawAddress = colMap.address !== undefined ? r[colMap.address] || "" : "";
+          const rawGstin = colMap.gstin !== undefined ? r[colMap.gstin] || "" : "";
+          const rawPan = colMap.pan !== undefined ? r[colMap.pan] || "" : "";
+
+          return {
+            tempId: index + 1,
+            name: rawName.trim(),
+            email: extractFirstEmail(rawEmail),
+            phone: extractFirstPhone(rawPhone),
+            industry: rawIndustry.trim() || "General",
+            primaryContact: rawContact.trim(),
+            website: rawWebsite.trim(),
+            address: rawAddress.trim(),
+            gstin: rawGstin.trim(),
+            pan: rawPan.trim(),
+            status: "Active",
+          };
+        }).filter((r) => r.name || r.email || r.phone);
+
+        setCsvRows(records);
+        toast.success(`Parsed ${records.length} company records from CSV`);
+      } catch (err) {
+        console.error("Error parsing CSV", err);
+        toast.error("Failed to parse CSV file format");
+      } finally {
+        setParsing(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleRowChange = (index, field, value) => {
+    setCsvRows((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const handleRemoveRow = (index) => {
+    setCsvRows((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleBulkImport = async () => {
+    const validRecords = csvRows.filter((r) => r.name.trim());
+    if (validRecords.length === 0) {
+      toast.error("No valid company records with a Company Name to import");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const res = await api.post("/companies/bulk", { companies: validRecords });
+      toast.success(`Successfully imported ${res.data?.count || validRecords.length} companies`);
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error("Bulk import failed", err);
+      toast.error(err.response?.data?.message || "Bulk import failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const downloadSampleCSV = () => {
+    const csvContent =
+      "Company Name,Email,Phone,Industry,Primary Contact,Website,Address,GSTIN,PAN\n" +
+      "Apex Global Exim,info@apex.com, +91 98765 43210,Textiles,Rajesh Kumar,https://apex.com, Mumbai MH, 27AAAAA0000A1Z5, AAAAA0000A\n" +
+      "Zenith Agro Pvt Ltd,contact@zenithagro.com, +91 91234 56789,Agriculture,Priya Patel,https://zenithagro.com, Pune MH, 27BBBBB1111B1Z2, BBBBB1111B\n";
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "companies_sample_import.csv";
+    a.click();
+    a.remove();
+  };
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
         <div className="flex items-center justify-between border-b border-border pb-3">
-          <h2 className="text-lg font-bold">Add New Company</h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={16} /></button>
-        </div>
-        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
           <div>
-            <label className="mb-1 block text-xs font-semibold">Company Name *</label>
-            <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Apex Global Ltd" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+            <h2 className="text-lg font-bold">Add Company</h2>
+            <p className="text-xs text-muted-foreground">Create a company manually or import via CSV file.</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold">Industry *</label>
-              <select value={formData.industry} onChange={(e) => setFormData({ ...formData, industry: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none">
-                {industries.map((i) => <option key={i}>{i}</option>)}
-              </select>
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
+        </div>
+
+        {/* Tab Headers */}
+        <div className="mt-4 flex border-b border-border text-xs font-semibold">
+          <button
+            onClick={() => setTab("manual")}
+            className={cn(
+              "px-4 py-2.5 border-b-2 transition cursor-pointer flex items-center gap-2",
+              tab === "manual" ? "border-indigo-600 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Building2 size={15} /> Manual Entry
+          </button>
+          <button
+            onClick={() => setTab("import")}
+            className={cn(
+              "px-4 py-2.5 border-b-2 transition cursor-pointer flex items-center gap-2",
+              tab === "import" ? "border-indigo-600 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FileSpreadsheet size={15} /> Import CSV Workflow
+          </button>
+        </div>
+
+        {/* Tab 1: Manual Entry */}
+        {tab === "manual" && (
+          <form className="mt-4 space-y-4" onSubmit={handleManualSubmit}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Company Name *</label>
+                <input
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g. Apex Global Ltd"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Industry *</label>
+                <select
+                  value={formData.industry}
+                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                >
+                  {industriesList.map((i) => <option key={i}>{i}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Phone *</label>
+                <input
+                  required
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+91 98765 43210"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Email *</label>
+                <input
+                  required
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="info@apex.com"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Primary Contact</label>
+                <input
+                  value={formData.primaryContact}
+                  onChange={(e) => setFormData({ ...formData, primaryContact: e.target.value })}
+                  placeholder="e.g. Rajesh Kumar"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Website</label>
+                <input
+                  value={formData.website}
+                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  placeholder="https://apex.com"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">GSTIN</label>
+                <input
+                  value={formData.gstin}
+                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
+                  placeholder="27AAAAA0000A1Z5"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">PAN</label>
+                <input
+                  value={formData.pan}
+                  onChange={(e) => setFormData({ ...formData, pan: e.target.value })}
+                  placeholder="AAAAA0000A"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold">Primary Contact</label>
-              <input value={formData.primaryContact} onChange={(e) => setFormData({ ...formData, primaryContact: e.target.value })} placeholder="e.g. Rajesh Kumar" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+              <label className="mb-1 block text-xs font-semibold">Address</label>
+              <input
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                placeholder="Full office address…"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border pt-4">
+              <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50"
+              >
+                {submitting && <Loader2 size={14} className="animate-spin" />} Create Company
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Tab 2: CSV Import Workflow */}
+        {tab === "import" && (
+          <div className="mt-4 space-y-5">
+            {/* CSV File Upload Dropzone */}
+            <div className="rounded-2xl border-2 border-dashed border-border p-6 text-center bg-muted/20 hover:bg-muted/40 transition">
+              <Upload size={32} className="mx-auto text-indigo-500 mb-2" />
+              <div className="text-sm font-bold text-foreground">Upload CSV File</div>
+              <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
+                File may contain Company Name, Email, Phone, Industry, Contact, Website, Address, GSTIN, PAN.
+                If multiple emails or phones exist in a row, the 1st valid entry will be selected automatically.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                <label className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-indigo-500 cursor-pointer transition">
+                  <Upload size={14} /> Select CSV File
+                  <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+                </label>
+                <button
+                  type="button"
+                  onClick={downloadSampleCSV}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted cursor-pointer"
+                >
+                  <Download size={14} /> Download Sample Template
+                </button>
+              </div>
+              {csvFile && (
+                <div className="mt-3 text-xs font-medium text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50 inline-block px-3 py-1 rounded-lg">
+                  Loaded: {csvFile.name} ({csvRows.length} records parsed)
+                </div>
+              )}
+            </div>
+
+            {/* CSV Parsed Records Review & Edit Section */}
+            {csvRows.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Review & Edit Imported Records ({csvRows.length})
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Guaranteed fields: <span className="font-semibold text-foreground">Company Name, Phone, Email</span>
+                  </div>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-border bg-card">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted text-left font-semibold text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">Company Name *</th>
+                        <th className="px-3 py-2">Phone *</th>
+                        <th className="px-3 py-2">Email *</th>
+                        <th className="px-3 py-2">Industry</th>
+                        <th className="px-3 py-2">Contact</th>
+                        <th className="px-3 py-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {csvRows.map((row, idx) => (
+                        <tr key={row.tempId || idx} className="hover:bg-muted/40 transition">
+                          <td className="p-1.5">
+                            <input
+                              value={row.name}
+                              onChange={(e) => handleRowChange(idx, "name", e.target.value)}
+                              placeholder="Required"
+                              className={cn(
+                                "w-full rounded-lg border bg-background px-2 py-1 outline-none",
+                                !row.name ? "border-rose-400 focus:ring-1 focus:ring-rose-400" : "border-border"
+                              )}
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              value={row.phone}
+                              onChange={(e) => handleRowChange(idx, "phone", e.target.value)}
+                              placeholder="Phone"
+                              className="w-full rounded-lg border border-border bg-background px-2 py-1 outline-none"
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              value={row.email}
+                              onChange={(e) => handleRowChange(idx, "email", e.target.value)}
+                              placeholder="Email"
+                              className="w-full rounded-lg border border-border bg-background px-2 py-1 outline-none"
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              value={row.industry}
+                              onChange={(e) => handleRowChange(idx, "industry", e.target.value)}
+                              placeholder="Industry"
+                              className="w-full rounded-lg border border-border bg-background px-2 py-1 outline-none"
+                            />
+                          </td>
+                          <td className="p-1.5">
+                            <input
+                              value={row.primaryContact}
+                              onChange={(e) => handleRowChange(idx, "primaryContact", e.target.value)}
+                              placeholder="Contact"
+                              className="w-full rounded-lg border border-border bg-background px-2 py-1 outline-none"
+                            />
+                          </td>
+                          <td className="p-1.5 text-right">
+                            <button
+                              onClick={() => handleRemoveRow(idx)}
+                              className="rounded-lg p-1 text-muted-foreground hover:bg-rose-50 hover:text-rose-600"
+                              title="Remove row"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                  <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBulkImport}
+                    disabled={submitting || csvRows.length === 0}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50"
+                  >
+                    {submitting && <Loader2 size={14} className="animate-spin" />}
+                    Import {csvRows.filter((r) => r.name).length} Companies
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Full Manual Edit Company Modal (With all extended edit sections) ── */
+function EditCompanyModal({ company, onClose, onSuccess }) {
+  const api = useApi();
+  const [submitting, setSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: company?.name || "",
+    industry: company?.industry || industriesList[0],
+    primaryContact: company?.primaryContact || "",
+    phone: company?.phone || "",
+    email: company?.email || "",
+    website: company?.website || "",
+    address: company?.address || "",
+    gstin: company?.gstin || "",
+    pan: company?.pan || "",
+    assignedManager: company?.assignedManager || managersList[0],
+    status: company?.status || "Active",
+    notes: company?.notes || "",
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await api.put(`/companies/${company._id}`, formData);
+      toast.success("Company updated successfully");
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error("Update company error", err);
+      toast.error(err.response?.data?.message || "Failed to update company");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs">
+              {formData.name ? formData.name.substring(0, 2).toUpperCase() : "CO"}
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Edit Company Details</h2>
+              <p className="text-xs text-muted-foreground">{company.name} · ID: {company.id}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold">Phone</label>
-              <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+91 98765 43210" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
+        </div>
+
+        <form className="mt-5 space-y-6" onSubmit={handleSubmit}>
+          {/* Section 1: Basic Details */}
+          <section className="space-y-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Basic Profile</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Company Name *</label>
+                <input
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Industry *</label>
+                <select
+                  value={formData.industry}
+                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                >
+                  {industriesList.map((i) => <option key={i}>{i}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Primary Contact Person</label>
+                <input
+                  value={formData.primaryContact}
+                  onChange={(e) => setFormData({ ...formData, primaryContact: e.target.value })}
+                  placeholder="e.g. Rajesh Kumar"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Assigned Account Manager</label>
+                <select
+                  value={formData.assignedManager}
+                  onChange={(e) => setFormData({ ...formData, assignedManager: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                >
+                  {managersList.map((m) => <option key={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Phone Number</label>
+                <input
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Email Address</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">Account Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Prospect">Prospect</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold">Email</label>
-              <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="info@apex.com" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+          </section>
+
+          {/* Section 2: Address & Website */}
+          <section className="space-y-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Address & Online Presence</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold">Website URL</label>
+                <input
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  placeholder="https://company.com"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold">Office Address</label>
+                <input
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="Street, City, State, Country"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
             </div>
-          </div>
+          </section>
+
+          {/* Section 3: Tax & Compliance */}
+          <section className="space-y-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">GST & Tax Registration</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold">GSTIN</label>
+                <input
+                  value={formData.gstin}
+                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
+                  placeholder="27AAAAA0000A1Z5"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 font-mono text-xs uppercase"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold">PAN</label>
+                <input
+                  value={formData.pan}
+                  onChange={(e) => setFormData({ ...formData, pan: e.target.value })}
+                  placeholder="AAAAA0000A"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 font-mono text-xs uppercase"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Section 4: Notes */}
+          <section>
+            <label className="mb-1 block text-xs font-semibold">Company Notes & Context</label>
+            <textarea
+              rows={3}
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Internal notes about this company…"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+            />
+          </section>
+
           <div className="flex justify-end gap-2 border-t border-border pt-4">
-            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">Cancel</button>
-            <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50">
-              {submitting && <Loader2 size={14} className="animate-spin" />} Create Company
+            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50"
+            >
+              {submitting && <Loader2 size={14} className="animate-spin" />} Save Changes
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+}
+
+// Custom CSV Text parser
+function parseCSVText(text) {
+  const lines = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (cur.trim()) lines.push(cur);
+      cur = "";
+      if (char === "\r" && text[i + 1] === "\n") i++;
+    } else {
+      cur += char;
+    }
+  }
+  if (cur.trim()) lines.push(cur);
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  const parseRow = (line) => {
+    const cells = [];
+    let cell = "";
+    let q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') {
+        if (q && line[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          q = !q;
+        }
+      } else if (c === "," && !q) {
+        cells.push(cell.trim());
+        cell = "";
+      } else {
+        cell += c;
+      }
+    }
+    cells.push(cell.trim());
+    return cells;
+  };
+
+  const headers = parseRow(lines[0]);
+  const rows = lines.slice(1).map(parseRow);
+  return { headers, rows };
+}
+
+// Map CSV headers to Company fields
+function mapHeaders(headers) {
+  const map = {};
+  headers.forEach((h, idx) => {
+    const clean = h.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (clean.includes("companyname") || clean === "company" || clean === "name") {
+      map.name = idx;
+    } else if (clean.includes("email")) {
+      map.email = idx;
+    } else if (clean.includes("phone") || clean.includes("mobile") || clean.includes("contactnumber") || clean === "contact") {
+      map.phone = idx;
+    } else if (clean.includes("industry")) {
+      map.industry = idx;
+    } else if (clean.includes("primarycontact") || clean.includes("contactperson") || clean.includes("primary")) {
+      map.primaryContact = idx;
+    } else if (clean.includes("website") || clean.includes("url")) {
+      map.website = idx;
+    } else if (clean.includes("address") || clean.includes("location")) {
+      map.address = idx;
+    } else if (clean.includes("gstin") || clean === "gst") {
+      map.gstin = idx;
+    } else if (clean.includes("pan")) {
+      map.pan = idx;
+    }
+  });
+  return map;
 }
