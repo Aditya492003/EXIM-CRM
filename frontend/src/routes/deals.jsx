@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Calendar, DollarSign, Filter, Handshake, LayoutGrid, List, Plus, Search, X,
-  MoreHorizontal, GripVertical, FileText, Clock, StickyNote, Video, Pencil, Trash2, CheckCircle2, ChevronRight, Loader2,
+  MoreHorizontal, GripVertical, FileText, Clock, StickyNote, Video, Pencil, Trash2, CheckCircle2, ChevronRight, Loader2, Building2
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
@@ -348,6 +348,85 @@ function EmployeeSelect({ value, onChange }) {
   );
 }
 
+function CompanySearchSelect({ value, onChange }) {
+  const api = useApi();
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get("/companies");
+        setCompanies(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch companies for deal select", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCompanies();
+  }, [api]);
+
+  const filtered = useMemo(() => {
+    if (!value) return companies;
+    const q = value.toLowerCase();
+    return companies.filter((c) => c.name.toLowerCase().includes(q));
+  }, [companies, value]);
+
+  return (
+    <div className="relative">
+      <input
+        required
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Type or select company name…"
+        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+      />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl animate-fade-in">
+            {loading ? (
+              <div className="p-2 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 size={12} className="animate-spin text-indigo-500" /> Loading companies…
+              </div>
+            ) : filtered.length > 0 ? (
+              filtered.map((c) => (
+                <button
+                  key={c._id || c.name}
+                  type="button"
+                  onClick={() => {
+                    onChange(c.name);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs text-left hover:bg-muted font-medium cursor-pointer transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2 size={13} className="text-indigo-500" />
+                    <span className="font-semibold text-foreground">{c.name}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.industry || "Company"}</span>
+                </button>
+              ))
+            ) : (
+              <div className="p-2.5 text-center text-xs text-muted-foreground">
+                No company matching "<span className="font-semibold text-foreground">{value}</span>".
+                <div className="text-[10px] text-indigo-600 mt-0.5 font-medium">New company name will be saved with this deal.</div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function AddDealModal({ defaultStage, onClose, onSuccess }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
@@ -391,7 +470,10 @@ function AddDealModal({ defaultStage, onClose, onSuccess }) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold">Company *</label>
-            <input required value={formData.company} onChange={(e) => setFormData({ ...formData, company: e.target.value })} placeholder="e.g. Apex Exports" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+            <CompanySearchSelect
+              value={formData.company}
+              onChange={(val) => setFormData({ ...formData, company: val })}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
