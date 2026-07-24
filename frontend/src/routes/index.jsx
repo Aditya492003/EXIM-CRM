@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useAuth } from "@clerk/clerk-react";
+import { useUser } from "@clerk/clerk-react";
 import { useState, useEffect, useCallback } from "react";
 import { LandingPage } from "./landing";
 import {
@@ -57,7 +57,7 @@ export const Route = createFileRoute("/")({
 const pieColors = ["#6366f1", "#8b5cf6", "#06b6d4", "#f59e0b", "#10b981", "#f43f5e"];
 
 function DashboardPage() {
-  const { isSignedIn, isLoaded, user } = useAuth();
+  const { isSignedIn, isLoaded, user } = useUser();
   const api = useApi();
 
   const [stats, setStats] = useState({ totalLeads: 0, newLeadsToday: 0, activeCompanies: 0, openDeals: 0, totalProposals: 0, pipelineValue: 0 });
@@ -125,7 +125,12 @@ function DashboardPage() {
     return <LandingPage />;
   }
 
-  const userName = user?.firstName || user?.fullName || "User";
+  const userName =
+    user?.firstName ||
+    (user?.fullName ? user.fullName.split(" ")[0] : null) ||
+    user?.username ||
+    user?.emailAddresses?.[0]?.emailAddress?.split("@")?.[0] ||
+    "there";
 
   const kpis = [
     { label: "Total Leads", value: stats.totalLeads, delta: "Live", icon: Users, tone: "from-indigo-500 to-blue-500" },
