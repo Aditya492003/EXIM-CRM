@@ -1,15 +1,15 @@
 import Company from "../models/Company.js";
 
-// @desc  Get all companies
+// @desc  Get all companies (Shared across all users)
 // @route GET /api/companies
 export const getCompanies = async (req, res, next) => {
   try {
-    const { status, industry, manager, search, page = 1, limit = 50 } = req.query;
+    const { status, industry, manager, search, page = 1, limit = 100 } = req.query;
     const filter = {};
 
-    if (status) filter.status = status;
-    if (industry) filter.industry = industry;
-    if (manager) filter.assignedManager = { $regex: manager, $options: "i" };
+    if (status && status !== "All") filter.status = status;
+    if (industry && industry !== "All") filter.industry = industry;
+    if (manager && manager !== "All") filter.assignedManager = { $regex: manager, $options: "i" };
     if (search) filter.name = { $regex: search, $options: "i" };
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -37,14 +37,56 @@ export const getCompany = async (req, res, next) => {
   }
 };
 
-// @desc  Create company
+// @desc  Create company with similarity & duplicate check
 // @route POST /api/companies
 export const createCompany = async (req, res, next) => {
   try {
+    const { name, email, phone, gstin } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Company name is required" });
+    }
+
+    const trimmedName = name.trim();
+    const trimmedEmail = email?.trim()?.toLowerCase();
+    const trimmedPhone = phone?.trim();
+    const trimmedGstin = gstin?.trim()?.toUpperCase();
+
+    // Check if a company with matching Name, Email, Phone or GSTIN already exists in shared DB
+    const orConditions = [{ name: new RegExp(`^${trimmedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") }];
+    if (trimmedEmail) orConditions.push({ email: trimmedEmail });
+    if (trimmedPhone) orConditions.push({ phone: trimmedPhone });
+    if (trimmedGstin) orConditions.push({ gstin: trimmedGstin });
+
+    const existingCompany = await Company.findOne({ $or: orConditions });
+
+    if (existingCompany) {
+      let matchedReason = `Name "${existingCompany.name}"`;
+      if (trimmedName.toLowerCase() === existingCompany.name.toLowerCase()) {
+        matchedReason = `Company Name "${existingCompany.name}"`;
+      } else if (trimmedEmail && existingCompany.email?.toLowerCase() === trimmedEmail) {
+        matchedReason = `Email "${existingCompany.email}"`;
+      } else if (trimmedPhone && existingCompany.phone === trimmedPhone) {
+        matchedReason = `Phone "${existingCompany.phone}"`;
+      } else if (trimmedGstin && existingCompany.gstin?.toUpperCase() === trimmedGstin) {
+        matchedReason = `GSTIN "${existingCompany.gstin}"`;
+      }
+
+      return res.status(409).json({
+        success: false,
+        message: `A similar company already exists in the shared database with ${matchedReason}. Duplicate entry prevented.`,
+        existingCompany,
+      });
+    }
+
     const company = await Company.create({
       ...req.body,
+      name: trimmedName,
+      email: trimmedEmail || "",
+      phone: trimmedPhone || "",
+      gstin: trimmedGstin || "",
       logoUrl: req.file?.path || undefined,
-      createdByClerkId: req.user.clerkId,
+      createdByClerkId: req.user?.clerkId,
     });
 
     res.status(201).json({ success: true, data: company });
@@ -114,7 +156,7 @@ export const exportCompaniesCSV = async (req, res, next) => {
   }
 };
 
-// @desc  Bulk import companies from CSV data
+// @desc  Bulk import companies from CSV with Duplicate Skipping
 // @route POST /api/companies/bulk
 export const importCompaniesBulk = async (req, res, next) => {
   try {
@@ -126,14 +168,14 @@ export const importCompaniesBulk = async (req, res, next) => {
     const formatted = companies
       .map((c) => ({
         name: c.name?.trim(),
-        email: c.email?.trim() || "",
+        email: c.email?.trim()?.toLowerCase() || "",
         phone: c.phone?.trim() || "",
         industry: c.industry?.trim() || "General",
         primaryContact: c.primaryContact?.trim() || "",
         website: c.website?.trim() || "",
         address: c.address?.trim() || "",
-        gstin: c.gstin?.trim() || "",
-        pan: c.pan?.trim() || "",
+        gstin: c.gstin?.trim()?.toUpperCase() || "",
+        pan: c.pan?.trim()?.toUpperCase() || "",
         notes: c.notes?.trim() || "",
         status: c.status || "Active",
         createdByClerkId: req.user?.clerkId,
@@ -144,12 +186,55 @@ export const importCompaniesBulk = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "No valid company records found" });
     }
 
-    const created = await Company.insertMany(formatted);
+    // Fetch existing companies from shared DB to check for duplicates
+    const existingDbCompanies = await Company.find({}, "name email phone gstin").lean();
+    const existingNames = new Set(existingDbCompanies.map((c) => c.name.toLowerCase().trim()));
+    const existingEmails = new Set(existingDbCompanies.filter((c) => c.email).map((c) => c.email.toLowerCase().trim()));
+    const existingPhones = new Set(existingDbCompanies.filter((c) => c.phone).map((c) => c.phone.trim()));
+    const existingGstins = new Set(existingDbCompanies.filter((c) => c.gstin).map((c) => c.gstin.toUpperCase().trim()));
+
+    const newRecordsToInsert = [];
+    const skippedDuplicates = [];
+
+    for (const c of formatted) {
+      const normName = c.name.toLowerCase();
+      const normEmail = c.email;
+      const normPhone = c.phone;
+      const normGstin = c.gstin;
+
+      const isDup =
+        (normName && existingNames.has(normName)) ||
+        (normEmail && existingEmails.has(normEmail)) ||
+        (normPhone && existingPhones.has(normPhone)) ||
+        (normGstin && existingGstins.has(normGstin));
+
+      if (isDup) {
+        skippedDuplicates.push(c);
+      } else {
+        // Track inserted items for intra-batch deduplication
+        if (normName) existingNames.add(normName);
+        if (normEmail) existingEmails.add(normEmail);
+        if (normPhone) existingPhones.add(normPhone);
+        if (normGstin) existingGstins.add(normGstin);
+
+        newRecordsToInsert.push(c);
+      }
+    }
+
+    let created = [];
+    if (newRecordsToInsert.length > 0) {
+      created = await Company.insertMany(newRecordsToInsert);
+    }
 
     res.status(201).json({
       success: true,
       count: created.length,
+      skippedCount: skippedDuplicates.length,
       data: created,
+      message:
+        skippedDuplicates.length > 0
+          ? `Imported ${created.length} new companies. Skipped ${skippedDuplicates.length} duplicates already present in shared database.`
+          : `Successfully imported ${created.length} companies.`,
     });
   } catch (error) {
     next(error);

@@ -1,11 +1,17 @@
 import Lead from "../models/Lead.js";
 
-// @desc  Get all leads
+// Helper: build user-scoped filter
+const userFilter = (req, extra = {}) => ({
+  ...extra,
+  createdByClerkId: req.user?.clerkId,
+});
+
+// @desc  Get all leads (User-scoped — only current user's leads)
 // @route GET /api/leads
 export const getLeads = async (req, res, next) => {
   try {
     const { search, status, source, assignedTo, service, isFavorite, page = 1, limit = 50 } = req.query;
-    const filter = {};
+    const filter = userFilter(req);
 
     if (status) filter.status = status;
     if (source) filter.source = source;
@@ -34,11 +40,11 @@ export const getLeads = async (req, res, next) => {
   }
 };
 
-// @desc  Get single lead
+// @desc  Get single lead (User-scoped)
 // @route GET /api/leads/:id
 export const getLead = async (req, res, next) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findOne({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
     res.status(200).json({ success: true, data: lead });
@@ -47,13 +53,13 @@ export const getLead = async (req, res, next) => {
   }
 };
 
-// @desc  Create lead
+// @desc  Create lead (stamped with clerkId)
 // @route POST /api/leads
 export const createLead = async (req, res, next) => {
   try {
     const lead = await Lead.create({
       ...req.body,
-      createdByClerkId: req.user.clerkId,
+      createdByClerkId: req.user?.clerkId,
     });
 
     res.status(201).json({ success: true, data: lead });
@@ -62,14 +68,15 @@ export const createLead = async (req, res, next) => {
   }
 };
 
-// @desc  Update lead (full update)
+// @desc  Update lead (User-scoped)
 // @route PUT /api/leads/:id
 export const updateLead = async (req, res, next) => {
   try {
-    const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const lead = await Lead.findOneAndUpdate(
+      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+      req.body,
+      { new: true, runValidators: true }
+    );
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
     res.status(200).json({ success: true, data: lead });
@@ -78,18 +85,15 @@ export const updateLead = async (req, res, next) => {
   }
 };
 
-// @desc  Update lead status only (inline dropdown)
+// @desc  Update lead status only (User-scoped)
 // @route PATCH /api/leads/:id/status
 export const updateLeadStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
+    if (!status) return res.status(400).json({ success: false, message: "Status is required" });
 
-    if (!status) {
-      return res.status(400).json({ success: false, message: "Status is required" });
-    }
-
-    const lead = await Lead.findByIdAndUpdate(
-      req.params.id,
+    const lead = await Lead.findOneAndUpdate(
+      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
       { status },
       { new: true, runValidators: true }
     );
@@ -101,11 +105,11 @@ export const updateLeadStatus = async (req, res, next) => {
   }
 };
 
-// @desc  Toggle lead favorite
+// @desc  Toggle lead favorite (User-scoped)
 // @route PATCH /api/leads/:id/favorite
 export const toggleFavorite = async (req, res, next) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findOne({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
     lead.isFavorite = !lead.isFavorite;
@@ -117,11 +121,11 @@ export const toggleFavorite = async (req, res, next) => {
   }
 };
 
-// @desc  Delete lead
+// @desc  Delete lead (User-scoped)
 // @route DELETE /api/leads/:id
 export const deleteLead = async (req, res, next) => {
   try {
-    const lead = await Lead.findByIdAndDelete(req.params.id);
+    const lead = await Lead.findOneAndDelete({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
     res.status(200).json({ success: true, message: "Lead deleted" });
@@ -130,11 +134,11 @@ export const deleteLead = async (req, res, next) => {
   }
 };
 
-// @desc  Export leads as CSV
+// @desc  Export user's own leads as CSV
 // @route GET /api/leads/export/csv
 export const exportLeadsCSV = async (req, res, next) => {
   try {
-    const leads = await Lead.find({}).lean();
+    const leads = await Lead.find({ createdByClerkId: req.user?.clerkId }).lean();
 
     const headers = [
       "Name", "Company", "Phone", "Email", "Service",

@@ -1,19 +1,19 @@
 import Proposal from "../models/Proposal.js";
 
-// Helper: auto-generate proposal number e.g. PRO-2025-001
-const generateProposalNumber = async () => {
+// Helper: auto-generate proposal number scoped per user e.g. PRO-2025-001
+const generateProposalNumber = async (clerkId) => {
   const year = new Date().getFullYear();
-  const count = await Proposal.countDocuments();
+  const count = await Proposal.countDocuments({ createdByClerkId: clerkId });
   const padded = String(count + 1).padStart(3, "0");
   return `PRO-${year}-${padded}`;
 };
 
-// @desc  Get all proposals
+// @desc  Get all proposals (User-scoped — only current user's proposals)
 // @route GET /api/proposals
 export const getProposals = async (req, res, next) => {
   try {
     const { status, client, search, page = 1, limit = 50 } = req.query;
-    const filter = {};
+    const filter = { createdByClerkId: req.user?.clerkId };
 
     if (status) filter.status = status;
     if (client) filter.client = { $regex: client, $options: "i" };
@@ -38,11 +38,11 @@ export const getProposals = async (req, res, next) => {
   }
 };
 
-// @desc  Get single proposal
+// @desc  Get single proposal (User-scoped)
 // @route GET /api/proposals/:id
 export const getProposal = async (req, res, next) => {
   try {
-    const proposal = await Proposal.findById(req.params.id);
+    const proposal = await Proposal.findOne({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
     if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
 
     res.status(200).json({ success: true, data: proposal });
@@ -51,17 +51,17 @@ export const getProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Create proposal (auto-generates number)
+// @desc  Create proposal (User-scoped, auto-generates number)
 // @route POST /api/proposals
 export const createProposal = async (req, res, next) => {
   try {
-    const number = await generateProposalNumber();
+    const number = await generateProposalNumber(req.user?.clerkId);
 
     const proposal = await Proposal.create({
       ...req.body,
       number,
       attachmentUrl: req.file?.path || undefined,
-      createdByClerkId: req.user.clerkId,
+      createdByClerkId: req.user?.clerkId,
     });
 
     res.status(201).json({ success: true, data: proposal });
@@ -70,17 +70,18 @@ export const createProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Update proposal (full update)
+// @desc  Update proposal (User-scoped)
 // @route PUT /api/proposals/:id
 export const updateProposal = async (req, res, next) => {
   try {
     const updateData = { ...req.body };
     if (req.file?.path) updateData.attachmentUrl = req.file.path;
 
-    const proposal = await Proposal.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    const proposal = await Proposal.findOneAndUpdate(
+      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+      updateData,
+      { new: true, runValidators: true }
+    );
     if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
 
     res.status(200).json({ success: true, data: proposal });
@@ -89,30 +90,22 @@ export const updateProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Update proposal status only
+// @desc  Update proposal status only (User-scoped)
 // @route PATCH /api/proposals/:id/status
 export const updateProposalStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
-
-    if (!status) {
-      return res.status(400).json({ success: false, message: "Status is required" });
-    }
+    if (!status) return res.status(400).json({ success: false, message: "Status is required" });
 
     const updateData = { status };
+    if (status === "Sent" || status === "Under Review") updateData.sentDate = new Date();
+    if (status === "Approved") updateData.approvedDate = new Date();
 
-    // Auto-set dates based on status transitions
-    if (status === "Sent" || status === "Under Review") {
-      updateData.sentDate = new Date();
-    }
-    if (status === "Approved") {
-      updateData.approvedDate = new Date();
-    }
-
-    const proposal = await Proposal.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    const proposal = await Proposal.findOneAndUpdate(
+      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+      updateData,
+      { new: true, runValidators: true }
+    );
     if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
 
     res.status(200).json({ success: true, data: proposal });
@@ -121,11 +114,11 @@ export const updateProposalStatus = async (req, res, next) => {
   }
 };
 
-// @desc  Delete proposal
+// @desc  Delete proposal (User-scoped)
 // @route DELETE /api/proposals/:id
 export const deleteProposal = async (req, res, next) => {
   try {
-    const proposal = await Proposal.findByIdAndDelete(req.params.id);
+    const proposal = await Proposal.findOneAndDelete({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
     if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
 
     res.status(200).json({ success: true, message: "Proposal deleted" });

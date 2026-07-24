@@ -211,7 +211,7 @@ function DealsPage() {
             <div className="mt-2 text-sm">Loading deal pipeline from MongoDB...</div>
           </div>
         ) : view === "kanban" ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 overflow-x-auto pb-4">
+          <div className="flex gap-3 overflow-x-auto pb-4 items-start">
             {stages.map((st) => {
               const list = byStage(st);
               const val = list.reduce((a, b) => a + b.value, 0);
@@ -220,34 +220,36 @@ function DealsPage() {
                   key={st}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={() => onDrop(st)}
-                  className="flex flex-col rounded-2xl border border-border bg-card p-3 min-w-[220px]"
+                  className="flex flex-col rounded-2xl border border-border bg-card p-2.5 shrink-0 w-[185px]"
                 >
+                  {/* Column Header */}
                   <div className="flex items-center justify-between border-b border-border pb-2">
-                    <span className="text-xs font-bold">{st}</span>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold">{list.length}</span>
+                    <span className="text-[11px] font-bold truncate">{st}</span>
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold shrink-0 ml-1">{list.length}</span>
                   </div>
-                  <div className="mt-1 text-[11px] font-semibold text-muted-foreground">₹{(val / 100000).toFixed(1)}L</div>
+                  <div className="mt-1 text-[10px] font-semibold text-muted-foreground">₹{(val / 100000).toFixed(1)}L</div>
 
-                  <div className="mt-3 flex-1 space-y-2.5 min-h-[120px]">
+                  {/* Cards */}
+                  <div className="mt-2 flex flex-col gap-2 min-h-[80px]">
                     {list.map((d) => (
                       <div
                         key={d._id || d.id}
                         draggable
                         onDragStart={() => { setDragId(d.id); setDragMongoId(d._id); }}
                         onClick={() => setActive(d)}
-                        className="group relative rounded-xl border border-border bg-background p-3 shadow-sm hover:border-indigo-400 hover:shadow-md transition cursor-grab active:cursor-grabbing"
+                        className="rounded-xl border border-border bg-background px-2.5 py-2 shadow-sm hover:border-indigo-400 hover:shadow-md transition cursor-grab active:cursor-grabbing"
                       >
-                        <div className="font-semibold text-xs text-foreground line-clamp-1">{d.name}</div>
-                        <div className="text-[11px] text-muted-foreground">{d.company}</div>
-                        <div className="mt-2 flex items-center justify-between text-xs">
-                          <span className="font-bold text-indigo-600">₹{(d.value / 100000).toFixed(1)}L</span>
-                          <span className="text-[10px] text-muted-foreground">{d.owner}</span>
+                        <div className="font-semibold text-[11px] text-foreground line-clamp-1 leading-tight">{d.name}</div>
+                        <div className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{d.company}</div>
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-indigo-600">₹{(d.value / 100000).toFixed(1)}L</span>
+                          <span className="text-[9px] text-muted-foreground truncate max-w-[60px] text-right">{d.owner?.split(" ")[0]}</span>
                         </div>
                       </div>
                     ))}
                     {list.length === 0 && (
-                      <div className="grid h-24 place-items-center rounded-xl border border-dashed border-border text-[11px] text-muted-foreground">
-                        Drop deals here
+                      <div className="grid h-16 place-items-center rounded-xl border border-dashed border-border text-[10px] text-muted-foreground">
+                        Drop here
                       </div>
                     )}
                   </div>

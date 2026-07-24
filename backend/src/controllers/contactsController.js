@@ -1,16 +1,14 @@
 import Contact from "../models/Contact.js";
 
-// @desc  Get all contacts
+// @desc  Get all contacts (User-scoped — only current user's contacts)
 // @route GET /api/contacts
 export const getContacts = async (req, res, next) => {
   try {
     const { company, search } = req.query;
-    const filter = {};
+    const filter = { createdByClerkId: req.user?.clerkId };
 
-    // Filter by company name or companyId (frontend uses company name dropdown)
     if (company) filter.company = { $regex: company, $options: "i" };
 
-    // Search by name, email or designation
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -27,11 +25,11 @@ export const getContacts = async (req, res, next) => {
   }
 };
 
-// @desc  Get single contact
+// @desc  Get single contact (User-scoped)
 // @route GET /api/contacts/:id
 export const getContact = async (req, res, next) => {
   try {
-    const contact = await Contact.findById(req.params.id);
+    const contact = await Contact.findOne({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
     if (!contact) return res.status(404).json({ success: false, message: "Contact not found" });
 
     res.status(200).json({ success: true, data: contact });
@@ -40,14 +38,14 @@ export const getContact = async (req, res, next) => {
   }
 };
 
-// @desc  Create contact
+// @desc  Create contact (stamped with clerkId)
 // @route POST /api/contacts
 export const createContact = async (req, res, next) => {
   try {
     const contact = await Contact.create({
       ...req.body,
       avatarUrl: req.file?.path || undefined,
-      createdByClerkId: req.user.clerkId,
+      createdByClerkId: req.user?.clerkId,
     });
 
     res.status(201).json({ success: true, data: contact });
@@ -56,17 +54,18 @@ export const createContact = async (req, res, next) => {
   }
 };
 
-// @desc  Update contact
+// @desc  Update contact (User-scoped)
 // @route PUT /api/contacts/:id
 export const updateContact = async (req, res, next) => {
   try {
     const updateData = { ...req.body };
     if (req.file?.path) updateData.avatarUrl = req.file.path;
 
-    const contact = await Contact.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    const contact = await Contact.findOneAndUpdate(
+      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+      updateData,
+      { new: true, runValidators: true }
+    );
     if (!contact) return res.status(404).json({ success: false, message: "Contact not found" });
 
     res.status(200).json({ success: true, data: contact });
@@ -75,11 +74,11 @@ export const updateContact = async (req, res, next) => {
   }
 };
 
-// @desc  Delete contact
+// @desc  Delete contact (User-scoped)
 // @route DELETE /api/contacts/:id
 export const deleteContact = async (req, res, next) => {
   try {
-    const contact = await Contact.findByIdAndDelete(req.params.id);
+    const contact = await Contact.findOneAndDelete({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
     if (!contact) return res.status(404).json({ success: false, message: "Contact not found" });
 
     res.status(200).json({ success: true, message: "Contact deleted" });

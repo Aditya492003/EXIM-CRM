@@ -1,21 +1,40 @@
 import Deal from "../models/Deal.js";
 
-// @desc  Get all deals
+// @desc  Get user's deals (Private to user - Deals are not shared across users)
 // @route GET /api/deals
 export const getDeals = async (req, res, next) => {
   try {
     const { stage, priority, assignedTo, search, page = 1, limit = 50 } = req.query;
     const filter = {};
 
-    if (stage) filter.stage = stage;
-    if (priority) filter.priority = priority;
-    if (assignedTo) filter.assignedTo = { $regex: assignedTo, $options: "i" };
+    // Strict User Scoping for Deals: Users only see deals created by them (or unassigned legacy deals)
+    if (req.user?.clerkId) {
+      filter.$or = [
+        { createdByClerkId: req.user.clerkId },
+        { createdByClerkId: { $exists: false } },
+        { createdByClerkId: null },
+      ];
+    }
+
+    if (stage && stage !== "All") filter.stage = stage;
+    if (priority && priority !== "All") filter.priority = priority;
+    if (assignedTo && assignedTo !== "All") filter.assignedTo = { $regex: assignedTo, $options: "i" };
 
     if (search) {
-      filter.$or = [
+      const searchFilter = [
         { name: { $regex: search, $options: "i" } },
         { company: { $regex: search, $options: "i" } },
       ];
+      if (filter.$or) {
+        // Combine user scoping with search query using $and
+        filter.$and = [
+          { $or: filter.$or },
+          { $or: searchFilter }
+        ];
+        delete filter.$or;
+      } else {
+        filter.$or = searchFilter;
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -30,12 +49,17 @@ export const getDeals = async (req, res, next) => {
   }
 };
 
-// @desc  Get single deal
+// @desc  Get single deal (User-scoped)
 // @route GET /api/deals/:id
 export const getDeal = async (req, res, next) => {
   try {
     const deal = await Deal.findById(req.params.id);
     if (!deal) return res.status(404).json({ success: false, message: "Deal not found" });
+
+    // Ensure user owns the deal
+    if (deal.createdByClerkId && req.user?.clerkId && deal.createdByClerkId !== req.user.clerkId) {
+      return res.status(403).json({ success: false, message: "Access denied. Deals are private to their creator." });
+    }
 
     res.status(200).json({ success: true, data: deal });
   } catch (error) {
@@ -43,13 +67,13 @@ export const getDeal = async (req, res, next) => {
   }
 };
 
-// @desc  Create deal
+// @desc  Create deal (Stamped with user's clerkId)
 // @route POST /api/deals
 export const createDeal = async (req, res, next) => {
   try {
     const deal = await Deal.create({
       ...req.body,
-      createdByClerkId: req.user.clerkId,
+      createdByClerkId: req.user?.clerkId,
     });
 
     res.status(201).json({ success: true, data: deal });
@@ -74,7 +98,7 @@ export const updateDeal = async (req, res, next) => {
   }
 };
 
-// @desc  Update deal stage only (inline stage dropdown)
+// @desc  Update deal stage only (inline stage dropdown / Kanban drag drop)
 // @route PATCH /api/deals/:id/stage
 export const updateDealStage = async (req, res, next) => {
   try {
@@ -90,7 +114,6 @@ export const updateDealStage = async (req, res, next) => {
     if (stage === "Won" || stage === "Lost") {
       updateData.closedDate = new Date();
     } else {
-      // If moved back from Won/Lost, clear closedDate
       updateData.closedDate = null;
     }
 

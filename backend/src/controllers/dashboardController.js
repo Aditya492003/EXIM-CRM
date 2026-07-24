@@ -4,10 +4,11 @@ import Company from "../models/Company.js";
 import Proposal from "../models/Proposal.js";
 import Meeting from "../models/Meeting.js";
 
-// @desc  Get KPI stats for dashboard cards
+// @desc  Get KPI stats for dashboard cards (user-scoped where private)
 // @route GET /api/dashboard/stats
 export const getStats = async (req, res, next) => {
   try {
+    const clerkId = req.user?.clerkId;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -16,22 +17,22 @@ export const getStats = async (req, res, next) => {
     const [
       totalLeads,
       newLeadsToday,
-      activeCompanies,
+      activeCompanies,      // shared — no user filter
       openDeals,
       totalProposals,
       pipelineResult,
       scheduledMeetings,
     ] = await Promise.all([
-      Lead.countDocuments(),
-      Lead.countDocuments({ createdDate: { $gte: today, $lt: tomorrow } }),
-      Company.countDocuments({ status: "Active" }),
-      Deal.countDocuments({ stage: { $nin: ["Won", "Lost"] } }),
-      Proposal.countDocuments(),
+      Lead.countDocuments({ createdByClerkId: clerkId }),
+      Lead.countDocuments({ createdByClerkId: clerkId, createdDate: { $gte: today, $lt: tomorrow } }),
+      Company.countDocuments({ status: "Active" }),  // shared
+      Deal.countDocuments({ createdByClerkId: clerkId, stage: { $nin: ["Won", "Lost"] } }),
+      Proposal.countDocuments({ createdByClerkId: clerkId }),
       Deal.aggregate([
-        { $match: { stage: { $nin: ["Won", "Lost"] } } },
+        { $match: { createdByClerkId: clerkId, stage: { $nin: ["Won", "Lost"] } } },
         { $group: { _id: null, total: { $sum: "$value" } } },
       ]),
-      Meeting.countDocuments({ status: "Scheduled" }),
+      Meeting.countDocuments({ organizedByClerkId: clerkId, status: "Scheduled" }),
     ]);
 
     const pipelineValue = pipelineResult[0]?.total || 0;
@@ -53,17 +54,18 @@ export const getStats = async (req, res, next) => {
   }
 };
 
-// @desc  Get monthly lead growth (last 12 months)
+// @desc  Get monthly lead growth (last 12 months) — user-scoped
 // @route GET /api/dashboard/lead-growth
 export const getLeadGrowth = async (req, res, next) => {
   try {
+    const clerkId = req.user?.clerkId;
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
     const data = await Lead.aggregate([
-      { $match: { createdDate: { $gte: twelveMonthsAgo } } },
+      { $match: { createdByClerkId: clerkId, createdDate: { $gte: twelveMonthsAgo } } },
       {
         $group: {
           _id: { year: { $year: "$createdDate" }, month: { $month: "$createdDate" } },
@@ -85,17 +87,18 @@ export const getLeadGrowth = async (req, res, next) => {
   }
 };
 
-// @desc  Get monthly revenue from Won deals (last 12 months)
+// @desc  Get monthly revenue from Won deals (last 12 months) — user-scoped
 // @route GET /api/dashboard/revenue
 export const getRevenue = async (req, res, next) => {
   try {
+    const clerkId = req.user?.clerkId;
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
     const data = await Deal.aggregate([
-      { $match: { stage: "Won", closedDate: { $gte: twelveMonthsAgo } } },
+      { $match: { createdByClerkId: clerkId, stage: "Won", closedDate: { $gte: twelveMonthsAgo } } },
       {
         $group: {
           _id: { year: { $year: "$closedDate" }, month: { $month: "$closedDate" } },
@@ -117,11 +120,13 @@ export const getRevenue = async (req, res, next) => {
   }
 };
 
-// @desc  Get deal count per stage
+// @desc  Get deal count per stage — user-scoped
 // @route GET /api/dashboard/deals-by-stage
 export const getDealsByStage = async (req, res, next) => {
   try {
+    const clerkId = req.user?.clerkId;
     const data = await Deal.aggregate([
+      { $match: { createdByClerkId: clerkId } },
       { $group: { _id: "$stage", count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
@@ -134,11 +139,13 @@ export const getDealsByStage = async (req, res, next) => {
   }
 };
 
-// @desc  Get lead count per source
+// @desc  Get lead count per source — user-scoped
 // @route GET /api/dashboard/lead-sources
 export const getLeadSources = async (req, res, next) => {
   try {
+    const clerkId = req.user?.clerkId;
     const data = await Lead.aggregate([
+      { $match: { createdByClerkId: clerkId } },
       { $group: { _id: "$source", value: { $sum: 1 } } },
       { $sort: { value: -1 } },
     ]);
@@ -151,12 +158,13 @@ export const getLeadSources = async (req, res, next) => {
   }
 };
 
-// @desc  Get team performance per Clerk user
+// @desc  Get team performance per assignedTo name — user-scoped (won deals by this user)
 // @route GET /api/dashboard/performance
 export const getTeamPerformance = async (req, res, next) => {
   try {
+    const clerkId = req.user?.clerkId;
     const data = await Deal.aggregate([
-      { $match: { stage: "Won" } },
+      { $match: { createdByClerkId: clerkId, stage: "Won" } },
       {
         $group: {
           _id: "$assignedTo",

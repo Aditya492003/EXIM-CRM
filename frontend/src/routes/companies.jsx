@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Building2, Download, Filter, Mail, Phone, Plus, Search, Upload, X,
   Pencil, Trash2, CheckCircle2, Loader2, Globe, FileText, ExternalLink,
-  ShieldCheck, AlertCircle, FileSpreadsheet, Eye
+  ShieldCheck, AlertCircle, FileSpreadsheet, Eye, AlertTriangle
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
@@ -129,10 +129,10 @@ export default function CompaniesPage() {
         {/* Page Header */}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Accounts Directory</div>
+            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Shared Accounts Directory</div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Companies & Clients</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {filtered.length} of {companiesList.length} accounts · Manage companies and import CRM leads
+              {filtered.length} of {companiesList.length} total shared companies across all team members · Single unified DB
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -171,7 +171,7 @@ export default function CompaniesPage() {
           </select>
         </div>
 
-        {/* Company List Table (Showing Company Name, Phone, Email & Actions) */}
+        {/* Company List Table (Showing 3 Key Fields: Company Name, Phone, Email + Actions) */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -188,7 +188,7 @@ export default function CompaniesPage() {
                   <tr>
                     <td colSpan={4} className="p-8 text-center text-muted-foreground">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
-                      <div className="mt-2 text-xs">Loading companies from database...</div>
+                      <div className="mt-2 text-xs">Loading shared company database...</div>
                     </td>
                   </tr>
                 ) : filtered.length > 0 ? (
@@ -265,8 +265,14 @@ export default function CompaniesPage() {
         />
       )}
 
-      {/* Add Company Modal (With Professional CSV Import Workflow) */}
-      {openAdd && <AddCompanyModal onClose={() => setOpenAdd(false)} onSuccess={fetchCompanies} />}
+      {/* Add Company Modal (With Shared DB De-duplication Check) */}
+      {openAdd && (
+        <AddCompanyModal
+          existingCompanies={companiesList}
+          onClose={() => setOpenAdd(false)}
+          onSuccess={fetchCompanies}
+        />
+      )}
 
       {/* Edit Company Modal (Full manual edit sections) */}
       {editing && <EditCompanyModal company={editing} onClose={() => setEditing(null)} onSuccess={fetchCompanies} />}
@@ -419,8 +425,8 @@ function InfoItem({ label, value, highlight }) {
   );
 }
 
-/* ── Add Company Modal with Manual Entry + CSV Import Workflow ────── */
-function AddCompanyModal({ onClose, onSuccess }) {
+/* ── Add Company Modal with Shared De-duplication Check & CSV Import Workflow ────── */
+function AddCompanyModal({ existingCompanies = [], onClose, onSuccess }) {
   const api = useApi();
   const [tab, setTab] = useState("manual"); // 'manual' | 'import'
   const [submitting, setSubmitting] = useState(false);
@@ -441,6 +447,24 @@ function AddCompanyModal({ onClose, onSuccess }) {
     notes: "",
   });
 
+  // Real-time Duplicate Match in Manual Mode
+  const manualDuplicateMatch = useMemo(() => {
+    if (!formData.name && !formData.email && !formData.phone && !formData.gstin) return null;
+
+    const normName = formData.name.trim().toLowerCase();
+    const normEmail = formData.email.trim().toLowerCase();
+    const normPhone = formData.phone.trim();
+    const normGstin = formData.gstin.trim().toUpperCase();
+
+    return existingCompanies.find((c) => {
+      if (normName && c.name.toLowerCase().trim() === normName) return true;
+      if (normEmail && c.email && c.email.toLowerCase().trim() === normEmail) return true;
+      if (normPhone && c.phone && c.phone.trim() === normPhone) return true;
+      if (normGstin && c.gstin && c.gstin.toUpperCase().trim() === normGstin) return true;
+      return false;
+    });
+  }, [formData, existingCompanies]);
+
   // CSV Import State
   const [csvFile, setCsvFile] = useState(null);
   const [csvRows, setCsvRows] = useState([]); // parsed company records
@@ -448,6 +472,11 @@ function AddCompanyModal({ onClose, onSuccess }) {
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
+    if (manualDuplicateMatch) {
+      toast.error(`Company "${manualDuplicateMatch.name}" already exists in shared DB`);
+      return;
+    }
+
     try {
       setSubmitting(true);
       await api.post("/companies", formData);
@@ -485,7 +514,7 @@ function AddCompanyModal({ onClose, onSuccess }) {
     return val.trim();
   };
 
-  // Helper function to parse CSV file content
+  // Parse CSV File & Check for DB Duplicates
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -505,37 +534,80 @@ function AddCompanyModal({ onClose, onSuccess }) {
           return;
         }
 
-        // Map column indexes
         const colMap = mapHeaders(headers);
 
-        const records = rows.map((r, index) => {
-          const rawName = colMap.name !== undefined ? r[colMap.name] || "" : r[0] || "";
-          const rawEmail = colMap.email !== undefined ? r[colMap.email] || "" : "";
-          const rawPhone = colMap.phone !== undefined ? r[colMap.phone] || "" : "";
-          const rawIndustry = colMap.industry !== undefined ? r[colMap.industry] || "" : "";
-          const rawContact = colMap.primaryContact !== undefined ? r[colMap.primaryContact] || "" : "";
-          const rawWebsite = colMap.website !== undefined ? r[colMap.website] || "" : "";
-          const rawAddress = colMap.address !== undefined ? r[colMap.address] || "" : "";
-          const rawGstin = colMap.gstin !== undefined ? r[colMap.gstin] || "" : "";
-          const rawPan = colMap.pan !== undefined ? r[colMap.pan] || "" : "";
+        // Pre-build index of existing companies for fast duplicate checks
+        const existingNames = new Set(existingCompanies.map((c) => c.name.toLowerCase().trim()));
+        const existingEmails = new Set(existingCompanies.filter((c) => c.email).map((c) => c.email.toLowerCase().trim()));
+        const existingPhones = new Set(existingCompanies.filter((c) => c.phone).map((c) => c.phone.trim()));
+        const existingGstins = new Set(existingCompanies.filter((c) => c.gstin).map((c) => c.gstin.toUpperCase().trim()));
 
-          return {
-            tempId: index + 1,
-            name: rawName.trim(),
-            email: extractFirstEmail(rawEmail),
-            phone: extractFirstPhone(rawPhone),
-            industry: rawIndustry.trim() || "General",
-            primaryContact: rawContact.trim(),
-            website: rawWebsite.trim(),
-            address: rawAddress.trim(),
-            gstin: rawGstin.trim(),
-            pan: rawPan.trim(),
-            status: "Active",
-          };
-        }).filter((r) => r.name || r.email || r.phone);
+        const batchNames = new Set();
+        const batchEmails = new Set();
+        const batchPhones = new Set();
+
+        const records = rows
+          .map((r, index) => {
+            const rawName = (colMap.name !== undefined ? r[colMap.name] || "" : r[0] || "").trim();
+            const rawEmail = extractFirstEmail(colMap.email !== undefined ? r[colMap.email] || "" : "");
+            const rawPhone = extractFirstPhone(colMap.phone !== undefined ? r[colMap.phone] || "" : "");
+            const rawIndustry = (colMap.industry !== undefined ? r[colMap.industry] || "" : "").trim();
+            const rawContact = (colMap.primaryContact !== undefined ? r[colMap.primaryContact] || "" : "").trim();
+            const rawWebsite = (colMap.website !== undefined ? r[colMap.website] || "" : "").trim();
+            const rawAddress = (colMap.address !== undefined ? r[colMap.address] || "" : "").trim();
+            const rawGstin = (colMap.gstin !== undefined ? r[colMap.gstin] || "" : "").trim();
+            const rawPan = (colMap.pan !== undefined ? r[colMap.pan] || "" : "").trim();
+
+            const normName = rawName.toLowerCase();
+            const normEmail = rawEmail.toLowerCase();
+            const normPhone = rawPhone;
+            const normGstin = rawGstin.toUpperCase();
+
+            // Duplicate Detection against shared DB + intra-batch
+            const isDbDuplicate =
+              (normName && existingNames.has(normName)) ||
+              (normEmail && existingEmails.has(normEmail)) ||
+              (normPhone && existingPhones.has(normPhone)) ||
+              (normGstin && existingGstins.has(normGstin));
+
+            const isBatchDuplicate =
+              (normName && batchNames.has(normName)) ||
+              (normEmail && batchEmails.has(normEmail)) ||
+              (normPhone && batchPhones.has(normPhone));
+
+            if (normName) batchNames.add(normName);
+            if (normEmail) batchEmails.add(normEmail);
+            if (normPhone) batchPhones.add(normPhone);
+
+            return {
+              tempId: index + 1,
+              name: rawName,
+              email: rawEmail,
+              phone: rawPhone,
+              industry: rawIndustry || "General",
+              primaryContact: rawContact,
+              website: rawWebsite,
+              address: rawAddress,
+              gstin: rawGstin,
+              pan: rawPan,
+              status: "Active",
+              isDuplicate: isDbDuplicate || isBatchDuplicate,
+              duplicateReason: isDbDuplicate
+                ? "Already exists in shared database"
+                : isBatchDuplicate
+                ? "Duplicate entry in CSV file"
+                : "",
+            };
+          })
+          .filter((r) => r.name || r.email || r.phone);
 
         setCsvRows(records);
-        toast.success(`Parsed ${records.length} company records from CSV`);
+        const dupCount = records.filter((r) => r.isDuplicate).length;
+        if (dupCount > 0) {
+          toast.warning(`Parsed ${records.length} records. Found ${dupCount} duplicates already in DB.`);
+        } else {
+          toast.success(`Parsed ${records.length} new company records from CSV`);
+        }
       } catch (err) {
         console.error("Error parsing CSV", err);
         toast.error("Failed to parse CSV file format");
@@ -557,16 +629,18 @@ function AddCompanyModal({ onClose, onSuccess }) {
   };
 
   const handleBulkImport = async () => {
-    const validRecords = csvRows.filter((r) => r.name.trim());
-    if (validRecords.length === 0) {
-      toast.error("No valid company records with a Company Name to import");
+    // Only import non-duplicate valid rows
+    const validNewRecords = csvRows.filter((r) => r.name.trim() && !r.isDuplicate);
+
+    if (validNewRecords.length === 0) {
+      toast.error("All rows are either duplicate or missing a company name.");
       return;
     }
 
     try {
       setSubmitting(true);
-      const res = await api.post("/companies/bulk", { companies: validRecords });
-      toast.success(`Successfully imported ${res.data?.count || validRecords.length} companies`);
+      const res = await api.post("/companies/bulk", { companies: validNewRecords });
+      toast.success(res.data?.message || `Successfully imported ${validNewRecords.length} companies`);
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -591,13 +665,16 @@ function AddCompanyModal({ onClose, onSuccess }) {
     a.remove();
   };
 
+  const duplicateCount = useMemo(() => csvRows.filter((r) => r.isDuplicate).length, [csvRows]);
+  const newCount = useMemo(() => csvRows.filter((r) => !r.isDuplicate && r.name).length, [csvRows]);
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div>
             <h2 className="text-lg font-bold">Add Company</h2>
-            <p className="text-xs text-muted-foreground">Create a company manually or import via CSV file.</p>
+            <p className="text-xs text-muted-foreground">Shared organization database · Duplicate prevention enabled</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
@@ -627,6 +704,17 @@ function AddCompanyModal({ onClose, onSuccess }) {
         {/* Tab 1: Manual Entry */}
         {tab === "manual" && (
           <form className="mt-4 space-y-4" onSubmit={handleManualSubmit}>
+            {manualDuplicateMatch && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300 flex items-start gap-2.5">
+                <AlertTriangle size={18} className="shrink-0 text-amber-600 mt-0.5" />
+                <div>
+                  <span className="font-bold">Similar Company Already Exists: </span>
+                  "<span className="font-semibold">{manualDuplicateMatch.name}</span>" ({manualDuplicateMatch.email || manualDuplicateMatch.phone}).
+                  <div className="mt-0.5 text-[11px] opacity-90">Company records are shared across all team members to avoid storage duplication.</div>
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-semibold">Company Name *</label>
@@ -721,7 +809,7 @@ function AddCompanyModal({ onClose, onSuccess }) {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || Boolean(manualDuplicateMatch)}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50"
               >
                 {submitting && <Loader2 size={14} className="animate-spin" />} Create Company
@@ -739,7 +827,7 @@ function AddCompanyModal({ onClose, onSuccess }) {
               <div className="text-sm font-bold text-foreground">Upload CSV File</div>
               <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
                 File may contain Company Name, Email, Phone, Industry, Contact, Website, Address, GSTIN, PAN.
-                If multiple emails or phones exist in a row, the 1st valid entry will be selected automatically.
+                Duplicates in the shared DB are automatically flagged & skipped to save storage.
               </p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
                 <label className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-indigo-500 cursor-pointer transition">
@@ -764,12 +852,12 @@ function AddCompanyModal({ onClose, onSuccess }) {
             {/* CSV Parsed Records Review & Edit Section */}
             {csvRows.length > 0 && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Review & Edit Imported Records ({csvRows.length})
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 p-3 rounded-xl border border-border">
+                  <div className="text-xs font-bold">
+                    Import Summary: <span className="text-emerald-600 font-extrabold">{newCount} New</span> · <span className="text-amber-600 font-extrabold">{duplicateCount} Existing Duplicates</span>
                   </div>
                   <div className="text-[11px] text-muted-foreground">
-                    Guaranteed fields: <span className="font-semibold text-foreground">Company Name, Phone, Email</span>
+                    Duplicate rows will be automatically skipped to prevent database bloat.
                   </div>
                 </div>
 
@@ -777,17 +865,31 @@ function AddCompanyModal({ onClose, onSuccess }) {
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted text-left font-semibold text-muted-foreground">
                       <tr>
+                        <th className="px-3 py-2">DB Status</th>
                         <th className="px-3 py-2">Company Name *</th>
                         <th className="px-3 py-2">Phone *</th>
                         <th className="px-3 py-2">Email *</th>
                         <th className="px-3 py-2">Industry</th>
-                        <th className="px-3 py-2">Contact</th>
                         <th className="px-3 py-2 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {csvRows.map((row, idx) => (
-                        <tr key={row.tempId || idx} className="hover:bg-muted/40 transition">
+                        <tr
+                          key={row.tempId || idx}
+                          className={cn("transition", row.isDuplicate ? "bg-amber-50/40 dark:bg-amber-950/20" : "hover:bg-muted/40")}
+                        >
+                          <td className="p-2 whitespace-nowrap">
+                            {row.isDuplicate ? (
+                              <span title={row.duplicateReason} className="inline-flex items-center gap-1 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold">
+                                ⚠️ Duplicate
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
+                                ✨ New
+                              </span>
+                            )}
+                          </td>
                           <td className="p-1.5">
                             <input
                               value={row.name}
@@ -823,14 +925,6 @@ function AddCompanyModal({ onClose, onSuccess }) {
                               className="w-full rounded-lg border border-border bg-background px-2 py-1 outline-none"
                             />
                           </td>
-                          <td className="p-1.5">
-                            <input
-                              value={row.primaryContact}
-                              onChange={(e) => handleRowChange(idx, "primaryContact", e.target.value)}
-                              placeholder="Contact"
-                              className="w-full rounded-lg border border-border bg-background px-2 py-1 outline-none"
-                            />
-                          </td>
                           <td className="p-1.5 text-right">
                             <button
                               onClick={() => handleRemoveRow(idx)}
@@ -852,11 +946,11 @@ function AddCompanyModal({ onClose, onSuccess }) {
                   </button>
                   <button
                     onClick={handleBulkImport}
-                    disabled={submitting || csvRows.length === 0}
+                    disabled={submitting || newCount === 0}
                     className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50"
                   >
                     {submitting && <Loader2 size={14} className="animate-spin" />}
-                    Import {csvRows.filter((r) => r.name).length} Companies
+                    Import {newCount} New Companies ({duplicateCount} skipped)
                   </button>
                 </div>
               </div>
