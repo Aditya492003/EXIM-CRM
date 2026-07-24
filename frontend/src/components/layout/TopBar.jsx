@@ -1,4 +1,4 @@
-import { Bell, Plus, Search, Moon, Sun, LayoutDashboard, Users, Building2, Handshake, Globe } from "lucide-react";
+import { Bell, Plus, Search, Moon, Sun, LayoutDashboard, Users, Building2, Handshake, Globe, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { SignedIn, SignedOut, UserButton, SignInButton, SignUpButton, useUser } from "@clerk/clerk-react";
@@ -97,8 +97,9 @@ function MobileNav() {
   const items = [
     { to: "/", label: "Dashboard", icon: LayoutDashboard },
     { to: "/leads", label: "Leads", icon: Users },
-    { to: "/companies", label: "Companies", icon: Building2 },
     { to: "/deals", label: "Deals", icon: Handshake },
+    { to: "/companies", label: "Companies", icon: Building2 },
+    { to: "/employees", label: "Employees", icon: UserPlus },
   ];
   return (
     <div className="flex items-center gap-1 overflow-x-auto border-t border-border/70 px-3 py-2 lg:hidden">
