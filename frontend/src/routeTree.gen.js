@@ -6,6 +6,7 @@ import { Route as LeadsRouteImport } from "./routes/leads";
 import { Route as ServicesRouteImport } from "./routes/services";
 import { Route as DealsRouteImport } from "./routes/deals";
 import { Route as CompaniesRouteImport } from "./routes/companies";
+import { Route as EmployeesRouteImport } from "./routes/employees";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as ProposalsIndexRouteImport } from "./routes/proposals.index";
 import { Route as ProposalsTemplatesRouteImport } from "./routes/proposals.templates";
@@ -46,6 +47,11 @@ const CompaniesRoute = CompaniesRouteImport.update({
   path: "/companies",
   getParentRoute: () => rootRouteImport,
 });
+const EmployeesRoute = EmployeesRouteImport.update({
+  id: "/employees",
+  path: "/employees",
+  getParentRoute: () => rootRouteImport,
+});
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
@@ -76,6 +82,7 @@ const rootRouteChildren = {
   DealsRoute: DealsRoute,
   LeadsRoute: LeadsRoute,
   ServicesRoute: ServicesRoute,
+  EmployeesRoute: EmployeesRoute,
   ProposalsNewRoute: ProposalsNewRoute,
   ProposalsTemplatesRoute: ProposalsTemplatesRoute,
   ProposalsIndexRoute: ProposalsIndexRoute,

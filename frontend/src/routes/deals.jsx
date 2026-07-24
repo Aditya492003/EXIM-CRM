@@ -305,6 +305,49 @@ function DealsPage() {
   );
 }
 
+function EmployeeSelect({ value, onChange }) {
+  const api = useApi();
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get("/employees");
+        const list = res.data?.data || [];
+        setEmployees(list);
+        if (!value && list.length > 0) {
+          onChange(list[0].name);
+        }
+      } catch (err) {
+        console.error("Failed to fetch employees", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEmployees();
+  }, [api]);
+
+  const hasValue = value && employees.some((e) => e.name === value);
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 cursor-pointer"
+    >
+      {loading && <option value="">Loading employees…</option>}
+      {value && !hasValue && <option value={value}>{value}</option>}
+      {employees.map((e) => (
+        <option key={e._id || e.name} value={e.name}>
+          {e.name} ({e.role || e.department || "Advisor"})
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function AddDealModal({ defaultStage, onClose, onSuccess }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
@@ -361,6 +404,13 @@ function AddDealModal({ defaultStage, onClose, onSuccess }) {
                 {stages.map((s) => <option key={s}>{s}</option>)}
               </select>
             </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">Deal Owner / Assigned To</label>
+            <EmployeeSelect
+              value={formData.assignedTo}
+              onChange={(val) => setFormData({ ...formData, assignedTo: val })}
+            />
           </div>
           <div className="flex justify-end gap-2 border-t border-border pt-4">
             <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">Cancel</button>

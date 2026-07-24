@@ -506,6 +506,50 @@ function CompanySearchSelect({ value, onChange }) {
   );
 }
 
+// Reusable Employee Select Component (Fetches live from DB)
+function EmployeeSelect({ value, onChange }) {
+  const api = useApi();
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get("/employees");
+        const list = res.data?.data || [];
+        setEmployees(list);
+        if (!value && list.length > 0) {
+          onChange(list[0].name);
+        }
+      } catch (err) {
+        console.error("Failed to fetch employees", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEmployees();
+  }, [api]);
+
+  const hasValue = value && employees.some((e) => e.name === value);
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 cursor-pointer"
+    >
+      {loading && <option value="">Loading employees…</option>}
+      {value && !hasValue && <option value={value}>{value}</option>}
+      {employees.map((e) => (
+        <option key={e._id || e.name} value={e.name}>
+          {e.name} ({e.role || e.department || "Advisor"})
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /* ── Full Interactive Lead Detail Drawer ──────────────── */
 function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
   const [tab, setTab] = useState("overview");
@@ -728,9 +772,10 @@ function AddLeadModal({ onClose, onSuccess }) {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold">Assigned To</label>
-              <select value={formData.assignedTo} onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
-                {["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai"].map((o) => <option key={o}>{o}</option>)}
-              </select>
+              <EmployeeSelect
+                value={formData.assignedTo}
+                onChange={(val) => setFormData({ ...formData, assignedTo: val })}
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold">Status</label>
@@ -861,9 +906,10 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold">Assigned To</label>
-                <select value={formData.assignedTo} onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
-                  {["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai"].map((o) => <option key={o}>{o}</option>)}
-                </select>
+                <EmployeeSelect
+                  value={formData.assignedTo}
+                  onChange={(val) => setFormData({ ...formData, assignedTo: val })}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold">Lead Status</label>

@@ -16,6 +16,7 @@ import dealsRoutes from "./routes/dealsRoutes.js";
 import meetingsRoutes from "./routes/meetingsRoutes.js";
 import proposalsRoutes from "./routes/proposalsRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import employeesRoutes from "./routes/employeesRoutes.js";
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/api/deals",      dealsRoutes);
 app.use("/api/meetings",   meetingsRoutes);
 app.use("/api/proposals",  proposalsRoutes);
 app.use("/api/dashboard",  dashboardRoutes);
+app.use("/api/employees",  employeesRoutes);
 
 // 404 handler
 app.use((req, res) => {

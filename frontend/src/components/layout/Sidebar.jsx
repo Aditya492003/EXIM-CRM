@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Briefcase, Building2, FileText, Handshake, LayoutDashboard, LayoutTemplate, Sparkles, UserCheck, Users, Video } from "lucide-react";
+import { Briefcase, Building2, FileText, Handshake, LayoutDashboard, LayoutTemplate, Sparkles, UserCheck, Users, Video, UserPlus } from "lucide-react";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   
   { to: "/leads", label: "Leads", icon: Users },
   { to: "/contacts", label: "Contacts", icon: UserCheck },
+  { to: "/employees", label: "Employees", icon: UserPlus },
   { to: "/meetings", label: "Meetings", icon: Video },
   { to: "/services", label: "Services", icon: Briefcase },
   { to: "/companies", label: "Companies", icon: Building2 },
