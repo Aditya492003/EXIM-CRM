@@ -29,18 +29,21 @@ function ServicesPage() {
       setLoading(true);
       const res = await api.get("/services");
       let data = res.data?.data || [];
-      setServices(data.map(s => ({
-        id: s.code || s._id,
-        _id: s._id,
-        name: s.name,
-        category: s.category,
-        price: s.fee ? `₹${s.fee.toLocaleString("en-IN")}` : s.price || "₹0",
-        fee: s.fee || 0,
-        description: s.description || "",
-        activeLeads: s.activeJobsCount || s.activeLeads || 0,
-        completedJobs: s.completedJobsCount || s.completedJobs || 0,
-        status: s.status || "Active"
-      })));
+      setServices(data.map(s => {
+        const numVal = s.price ?? s.fee ?? 0;
+        return {
+          id: s.code || s._id,
+          _id: s._id,
+          name: s.name,
+          category: s.category,
+          price: `₹${numVal.toLocaleString("en-IN")}`,
+          fee: numVal,
+          description: s.description || "",
+          activeLeads: s.activeJobsCount || s.activeLeads || 0,
+          completedJobs: s.completedJobsCount || s.completedJobs || 0,
+          status: s.status || "Active"
+        };
+      }));
     } catch (err) {
       console.error("Failed to load services", err);
       setServices([]);
@@ -59,7 +62,7 @@ function ServicesPage() {
       if (service._id) {
         await api.delete(`/services/${service._id}`);
       }
-      setServices(prev => prev.filter(s => (s._id || s.id) !== (service._id || service.id)));
+      setServices((prev) => prev.filter((s) => s._id !== service._id));
       toast.success("Service deleted successfully");
     } catch (err) {
       toast.error("Failed to delete service");
@@ -67,136 +70,99 @@ function ServicesPage() {
   };
 
   const filtered = useMemo(() => {
-    let out = services;
-    if (category !== "All") {
-      out = out.filter((s) => s.category === category);
-    }
-    if (search) {
-      const q = search.toLowerCase();
-      out = out.filter(
-        (s) => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q))
-      );
-    }
-    return out;
-  }, [services, category, search]);
-
-  const totalRevenueNum = services.reduce((a, c) => a + (c.fee || 0), 0);
-  const totalRevenueText = totalRevenueNum > 0 ? `₹${(totalRevenueNum / 100000).toFixed(1)}L` : "₹0";
-
-  const kpis = [
-    { label: "Total Services", value: services.length, icon: Layers, tone: "from-indigo-500 to-violet-500" },
-    { label: "Active Advisory Jobs", value: services.reduce((a, c) => a + (c.activeLeads || 0), 0), icon: Briefcase, tone: "from-emerald-500 to-teal-500" },
-    { label: "Completed Projects", value: services.reduce((a, c) => a + (c.completedJobs || 0), 0), icon: CheckCircle2, tone: "from-blue-500 to-cyan-500" },
-    { label: "Est. Service Revenue", value: totalRevenueText, icon: TrendingUp, tone: "from-amber-500 to-orange-500" },
-  ];
+    return services.filter((s) => {
+      const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.description.toLowerCase().includes(search.toLowerCase());
+      const matchCategory = category === "All" || s.category === category;
+      return matchSearch && matchCategory;
+    });
+  }, [services, search, category]);
 
   return (
     <AppLayout>
       <div className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Exim Advisory Services</div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Services & Jobs Catalog</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Manage export-import advisory offerings, active jobs, client assignments, and pricing structures.
-            </p>
+            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Portfolio</div>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Services & Advisory Jobs</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Manage service catalog, standard pricing, and track active jobs across clients.</p>
           </div>
           <button
             onClick={() => setOpenAdd(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-500/20 hover:shadow-lg transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-indigo-500/20 hover:shadow-lg transition cursor-pointer"
           >
             <Plus size={14} /> Add New Service
           </button>
         </div>
 
-        {/* KPI Summary Cards */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {kpis.map((k) => (
-            <div key={k.label} className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm">
-              <div className={cn("absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br opacity-20 blur-xl", k.tone)} />
-              <div className={cn("grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br text-white shadow-md", k.tone)}>
-                <k.icon size={16} />
-              </div>
-              <div className="mt-3 text-xs font-medium text-muted-foreground">{k.label}</div>
-              <div className="mt-1 flex items-end justify-between">
-                <div className="text-2xl font-bold tracking-tight">{k.value}</div>
-                <ArrowUpRight size={14} className="text-emerald-500" />
-              </div>
-            </div>
-          ))}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard icon={Layers} label="Total Services" value={services.length} sub="Active catalog" color="indigo" />
+          <StatCard icon={Briefcase} label="Active Categories" value={new Set(services.map(s => s.category)).size} sub="Service divisions" color="emerald" />
+          <StatCard icon={TrendingUp} label="Catalog Categories" value={categories.length - 1} sub="Available sectors" color="blue" />
+          <StatCard icon={CheckCircle2} label="Published Services" value={services.filter(s => s.status === "Active").length} sub="Ready for proposals" color="amber" />
         </div>
 
-        {/* Filters and Table */}
         <div className="rounded-2xl border border-border bg-card shadow-sm">
-          <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
             <div className="relative flex-1 min-w-[240px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" size={16} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
               <input
+                type="text"
+                placeholder="Search services by title or scope..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search services, category, or scope…"
-                className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-500/20"
+                className="h-9 w-full rounded-xl border border-border bg-background pl-9 pr-4 text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               />
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {categories.slice(0, 5).map((c) => (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {categories.map((cat) => (
                 <button
-                  key={c}
-                  onClick={() => setCategory(c)}
+                  key={cat}
+                  onClick={() => setCategory(cat)}
                   className={cn(
-                    "rounded-xl border px-3 py-1.5 text-xs font-medium transition cursor-pointer",
-                    category === c ? "border-indigo-500 bg-indigo-500 text-white shadow-sm" : "border-border bg-card hover:border-indigo-300 hover:text-indigo-600"
+                    "rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer",
+                    category === cat ? "bg-indigo-600 text-white shadow" : "bg-muted text-muted-foreground hover:bg-muted/80"
                   )}
                 >
-                  {c}
+                  {cat}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-muted/60 backdrop-blur-md text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-border bg-muted/40 text-muted-foreground font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="px-4 py-3">Service Code</th>
-                  <th className="px-4 py-3">Service / Job Name</th>
+                  <th className="px-4 py-3">Code</th>
+                  <th className="px-4 py-3">Service Title</th>
                   <th className="px-4 py-3">Category</th>
                   <th className="px-4 py-3">Standard Fee</th>
-                  <th className="px-4 py-3">Active Leads / Jobs</th>
-                  <th className="px-4 py-3">Completed Jobs</th>
+                  <th className="px-4 py-3 text-center">Active Jobs</th>
+                  <th className="px-4 py-3 text-center">Completed</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-border font-medium">
                 {loading ? (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                      <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
-                      <div className="mt-2 text-xs">Loading services from database...</div>
-                    </td>
-                  </tr>
+                  <tr><td colSpan={8} className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
                 ) : filtered.map((s) => (
-                  <tr key={s._id || s.id} className="group hover:bg-muted/40 transition">
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-xs text-muted-foreground">{s.id || s.code || "SRV"}</td>
+                  <tr key={s._id || s.id} className="hover:bg-muted/40 transition group">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-[11px] text-muted-foreground">{s.id}</td>
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-foreground">{s.name}</div>
-                      <div className="text-[11px] text-muted-foreground line-clamp-1">{s.description}</div>
+                      <div className="font-bold text-foreground text-sm">{s.name}</div>
+                      <div className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{s.description || "No scope specified"}</div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{s.category}</span>
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground">
+                        {s.category}
+                      </span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{s.price}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-bold text-indigo-600 dark:text-indigo-400">{s.price}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-center font-bold text-amber-600">{s.activeLeads}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-center font-bold text-emerald-600">{s.completedJobs}</td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="font-semibold">{s.activeLeads}</span>
-                        <span className="text-xs text-muted-foreground">leads</span>
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground font-medium">{s.completedJobs} jobs</td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
                         <CheckCircle2 size={11} /> {s.status}
                       </span>
                     </td>
@@ -212,15 +178,6 @@ function ServicesPage() {
                     </td>
                   </tr>
                 ))}
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="p-12 text-center text-muted-foreground">
-                      <Sparkles size={24} className="mx-auto text-muted-foreground/60" />
-                      <div className="mt-2 font-medium text-sm">No services in database</div>
-                      <div className="text-xs mt-1">Click "Add New Service" to create your first entry.</div>
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
@@ -233,13 +190,37 @@ function ServicesPage() {
   );
 }
 
+function StatCard({ icon: Icon, label, value, sub, color }) {
+  const colorMap = {
+    indigo: "text-indigo-600 bg-indigo-50 border-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20",
+    emerald: "text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20",
+    blue: "text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20",
+    amber: "text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+        <div className={cn("rounded-xl border p-2", colorMap[color] || colorMap.indigo)}>
+          <Icon size={16} />
+        </div>
+      </div>
+      <div className="mt-2 text-2xl font-bold tracking-tight">{value}</div>
+      <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
 function ServiceModal({ service, onClose, onSuccess }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
+  const initialFee = service?.fee !== undefined && service?.fee !== null ? String(service.fee) : (service?.price ? String(service.price).replace(/[^\d]/g, '') : "");
+  
   const [formData, setFormData] = useState({
     name: service?.name || "",
     category: service?.category || "DGFT Advisory",
-    fee: service?.fee || (service?.price ? parseInt(service.price.replace(/[^\d]/g, '')) || 0 : 0),
+    fee: initialFee,
     description: service?.description || "",
     code: service?.code || service?.id || `SRV-${Math.floor(1000 + Math.random() * 9000)}`,
   });
@@ -248,11 +229,21 @@ function ServiceModal({ service, onClose, onSuccess }) {
     e.preventDefault();
     try {
       setSubmitting(true);
+      const numericPrice = parseFloat(formData.fee) || 0;
+      const payload = {
+        name: formData.name,
+        category: formData.category,
+        price: numericPrice,
+        fee: numericPrice,
+        description: formData.description,
+        code: formData.code,
+      };
+
       if (service?._id) {
-        await api.put(`/services/${service._id}`, formData);
+        await api.put(`/services/${service._id}`, payload);
         toast.success("Service updated successfully");
       } else {
-        await api.post("/services", formData);
+        await api.post("/services", payload);
         toast.success("Service created successfully");
       }
       onSuccess?.();
@@ -273,7 +264,7 @@ function ServiceModal({ service, onClose, onSuccess }) {
             <h2 className="text-lg font-bold">{service ? "Edit Service / Job" : "Add New Advisory Service"}</h2>
             <p className="text-xs text-muted-foreground">Configure pricing, category and description.</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
+          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
@@ -294,7 +285,7 @@ function ServiceModal({ service, onClose, onSuccess }) {
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 cursor-pointer"
               >
                 {categories.filter((c) => c !== "All").map((c) => <option key={c}>{c}</option>)}
               </select>
@@ -304,9 +295,10 @@ function ServiceModal({ service, onClose, onSuccess }) {
               <input
                 type="number"
                 required
+                min="0"
                 value={formData.fee}
-                onChange={(e) => setFormData({ ...formData, fee: Number(e.target.value) })}
-                placeholder="50000"
+                onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
+                placeholder="e.g. 50000"
                 className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
               />
             </div>

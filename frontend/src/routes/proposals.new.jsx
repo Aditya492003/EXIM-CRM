@@ -188,9 +188,12 @@ function NewProposalPage() {
   /* Auto-fill placeholders when Service changes */
   useEffect(() => {
     if (serviceObj) {
+      const rawPrice = serviceObj.price ?? serviceObj.fee ?? "";
+      const numStr = String(rawPrice).replace(/[^\d]/g, "");
+      const formattedFee = numStr ? Number(numStr).toLocaleString("en-IN") : String(rawPrice);
       setFormData((prev) => ({
         ...prev,
-        service_fee: serviceObj.price.replace("₹", "").trim(),
+        service_fee: formattedFee,
       }));
     }
   }, [serviceObj]);
