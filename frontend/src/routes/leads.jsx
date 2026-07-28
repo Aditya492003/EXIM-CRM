@@ -592,6 +592,8 @@ function ServiceSelect({ value, onChange }) {
     fetchServices();
   }, [api]);
 
+  const hasValue = value && services.some((s) => s.name === value);
+
   return (
     <select
       value={value}
@@ -601,11 +603,14 @@ function ServiceSelect({ value, onChange }) {
       {services.length === 0 ? (
         <option value="">No services found</option>
       ) : (
-        services.map((s) => (
-          <option key={s._id || s.name} value={s.name}>
-            {s.name} ({s.fee ? `₹${s.fee.toLocaleString("en-IN")}` : s.price || "₹0"})
-          </option>
-        ))
+        <>
+          {value && !hasValue && <option value={value}>{value}</option>}
+          {services.map((s) => (
+            <option key={s._id || s.name} value={s.name}>
+              {s.name} ({s.fee ? `₹${s.fee.toLocaleString("en-IN")}` : s.price || "₹0"})
+            </option>
+          ))}
+        </>
       )}
     </select>
   );
@@ -762,7 +767,7 @@ function AddLeadModal({ onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     name: "",
     company: "",
-    service: serviceNames[0] || "DGFT Advisory",
+    service: "DGFT Advisory",
     phone: "",
     email: "",
     source: "Website",
@@ -943,7 +948,7 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     name: lead?.name || "",
     company: lead?.company || "",
-    service: lead?.service || serviceNames[0],
+    service: lead?.service || "DGFT Advisory",
     phone: lead?.phone || "",
     email: lead?.email || "",
     source: lead?.source || "Website",

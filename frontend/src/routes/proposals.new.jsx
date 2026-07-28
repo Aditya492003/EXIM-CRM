@@ -172,6 +172,7 @@ function NewProposalPage() {
   const [rendering, setRendering] = useState(false);
   const [renderError, setRenderError] = useState(null);
   const [zoom, setZoom] = useState(90);
+  const [detectedTags, setDetectedTags] = useState([]);
 
   /* Auto-fill placeholders when Client changes */
   useEffect(() => {
@@ -197,6 +198,33 @@ function NewProposalPage() {
       }));
     }
   }, [serviceObj]);
+
+  /* Extract all unique {placeholder} tags from DOCX XML */
+  useEffect(() => {
+    if (!templateBuffer) return;
+    try {
+      const zip = new PizZip(templateBuffer);
+      const docXml = zip.file("word/document.xml")?.asText() || "";
+      // Strip XML tags inside Word text nodes to get clean text
+      const cleanText = docXml.replace(/<[^>]+>/g, "");
+      const matches = cleanText.match(/\{([a-zA-Z0-9_]+)\}/g) || [];
+      const tags = Array.from(new Set(matches.map(m => m.replace(/[{}]/g, "").trim())));
+      setDetectedTags(tags);
+
+      // Auto-initialize form fields for any newly detected tags
+      setFormData((prev) => {
+        const updated = { ...prev };
+        tags.forEach((tag) => {
+          if (!(tag in updated)) {
+            updated[tag] = "";
+          }
+        });
+        return updated;
+      });
+    } catch (err) {
+      console.error("Failed to extract DOCX tags", err);
+    }
+  }, [templateBuffer]);
 
   /* Load raw DOCX template buffer when template changes */
   useEffect(() => {
@@ -494,19 +522,19 @@ function NewProposalPage() {
           </div>
         </button>
 
-        {/* Custom DOCX File Uploader */}
+        {/* Custom DOCX File Uploader - Strict .docx Security Enforcement */}
         <label className="rounded-2xl border-2 border-dashed border-border bg-card p-4 text-left hover:border-indigo-400 hover:bg-muted/60 transition cursor-pointer flex flex-col justify-between">
           <div className="flex items-start justify-between">
             <div>
               <div className="text-sm font-bold text-foreground flex items-center gap-1.5">
                 <Upload size={14} className="text-indigo-600" /> Upload Custom DOCX Template
               </div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">Upload your own Word (.docx) file containing custom {"{tags}"}</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">Only Microsoft Word (.docx) format accepted for security</div>
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between text-[11px] text-indigo-600 font-semibold">
-            <span>Browse File…</span>
-            <span className="text-muted-foreground font-normal">.docx only</span>
+            <span>Browse DOCX File…</span>
+            <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">.docx only</span>
           </div>
           <input
             type="file"
@@ -515,6 +543,10 @@ function NewProposalPage() {
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
+                if (!file.name.toLowerCase().endsWith(".docx")) {
+                  toast.error("Security Restriction: Only .docx (Microsoft Word) template files are allowed. PDF or other formats are blocked.");
+                  return;
+                }
                 const objectUrl = URL.createObjectURL(file);
                 setSelectedTemplate({
                   id: `custom-${Date.now()}`,
@@ -523,7 +555,7 @@ function NewProposalPage() {
                   category: "Custom Upload",
                   format: "DOCX",
                 });
-                toast.success(`Loaded custom template "${file.name}"`);
+                toast.success(`Loaded custom DOCX template "${file.name}" — tags inspected automatically!`);
               }
             }}
           />
@@ -551,22 +583,54 @@ function NewProposalPage() {
           Modify placeholder values below. Changes instantly inject into your DOCX template and render in real time.
         </p>
 
-        {/* Standard Placeholders Form */}
+        {/* Dynamic Placeholders Form - Automatically Rendered from DOCX Tags */}
         <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
-          {DEFAULT_PLACEHOLDERS.map((ph) => (
-            <div key={ph.key} className="space-y-1">
-              <label className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <span>{ph.label}</span>
-                <code className="text-[10px] lowercase text-indigo-600 dark:text-indigo-400">{`{${ph.key}}`}</code>
-              </label>
-              <input
-                value={formData[ph.key] ?? ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, [ph.key]: e.target.value }))}
-                className={inputCls}
-                placeholder={`Enter ${ph.label.toLowerCase()}…`}
-              />
+          {/* Detected DOCX Tags */}
+          {detectedTags.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  Detected Template Tags ({detectedTags.length})
+                </span>
+                <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-semibold border border-emerald-200">
+                  Auto-Inspected
+                </span>
+              </div>
+              {detectedTags.map((tagKey) => {
+                const prettyLabel = tagKey.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+                return (
+                  <div key={tagKey} className="space-y-1">
+                    <label className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                      <span>{prettyLabel}</span>
+                      <code className="text-[10px] lowercase text-indigo-600 dark:text-indigo-400 font-mono">{`{${tagKey}}`}</code>
+                    </label>
+                    <input
+                      value={formData[tagKey] ?? ""}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, [tagKey]: e.target.value }))}
+                      className={inputCls}
+                      placeholder={`Enter ${prettyLabel.toLowerCase()}…`}
+                    />
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          ) : (
+            /* Fallback to Standard Placeholders if no tags detected yet */
+            DEFAULT_PLACEHOLDERS.map((ph) => (
+              <div key={ph.key} className="space-y-1">
+                <label className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span>{ph.label}</span>
+                  <code className="text-[10px] lowercase text-indigo-600 dark:text-indigo-400">{`{${ph.key}}`}</code>
+                </label>
+                <input
+                  value={formData[ph.key] ?? ""}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, [ph.key]: e.target.value }))}
+                  className={inputCls}
+                  placeholder={`Enter ${ph.label.toLowerCase()}…`}
+                />
+              </div>
+            ))
+          )}
 
           {/* Custom Fields Section */}
           {customFields.length > 0 && (

@@ -70,12 +70,24 @@ function TemplatesPage() {
   function addFiles(files, customMeta = {}) {
     if (!files || files.length === 0) return;
 
-    const fileArray = Array.from(files);
-    const newUploadItems = fileArray.map((f, i) => ({
+    const rawArray = Array.from(files);
+    const validDocxFiles = [];
+
+    rawArray.forEach((f) => {
+      if (!f.name.toLowerCase().endsWith(".docx")) {
+        toast.error(`Security Restriction: "${f.name}" blocked. Only .docx (Microsoft Word) template files are allowed.`);
+      } else {
+        validDocxFiles.push(f);
+      }
+    });
+
+    if (validDocxFiles.length === 0) return;
+
+    const newUploadItems = validDocxFiles.map((f, i) => ({
       id: `${Date.now()}-${i}`,
       name: customMeta.name || f.name,
       size: f.size,
-      format: f.name.split(".").pop()?.toUpperCase() ?? "DOCX",
+      format: "DOCX",
       progress: 0,
       done: false,
       rawFile: f,
@@ -163,14 +175,16 @@ function TemplatesPage() {
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md">
             <UploadCloud size={20} />
           </div>
-          <div className="mt-3 text-sm font-semibold">Drop template files here</div>
-          <div className="text-xs text-muted-foreground">PDF, DOCX or HTML · up to 20MB each</div>
+          <div className="mt-3 text-sm font-semibold">Drop Word (.docx) template files here</div>
+          <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+            Strict Security Enforcement: .docx format only
+          </div>
           <div className="mt-4 flex gap-2">
             <button
               onClick={() => inputRef.current?.click()}
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 cursor-pointer"
             >
-              <Upload size={13} /> Choose files
+              <Upload size={13} /> Choose DOCX file
             </button>
             <button
               onClick={() => setShowModal(true)}
@@ -183,7 +197,7 @@ function TemplatesPage() {
             ref={inputRef}
             type="file"
             multiple
-            accept=".pdf,.doc,.docx,.html"
+            accept=".docx"
             className="hidden"
             onChange={(e) => addFiles(e.target.files)}
           />
@@ -377,17 +391,22 @@ function UploadModal({ onClose, onSave }) {
             onClick={() => ref.current?.click()}
             className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background px-3 py-6 text-sm text-muted-foreground hover:border-indigo-400 hover:text-foreground cursor-pointer"
           >
-            <UploadCloud size={16} /> {selectedFiles && selectedFiles.length > 0 ? `Selected: ${selectedFiles[0].name}` : "Click to choose file (PDF, DOCX, HTML)"}
+            <UploadCloud size={16} /> {selectedFiles && selectedFiles.length > 0 ? `Selected: ${selectedFiles[0].name}` : "Click to choose .docx file (Microsoft Word only)"}
           </button>
           <input
             ref={ref}
             type="file"
-            accept=".pdf,.doc,.docx,.html"
+            accept=".docx"
             className="hidden"
             onChange={(e) => {
               if (e.target.files?.length) {
+                const f = e.target.files[0];
+                if (!f.name.toLowerCase().endsWith(".docx")) {
+                  toast.error("Security Restriction: Only .docx (Microsoft Word) files are accepted.");
+                  return;
+                }
                 setSelectedFiles(e.target.files);
-                if (!name) setName(e.target.files[0].name.replace(/\.[^/.]+$/, ""));
+                if (!name) setName(f.name.replace(/\.[^/.]+$/, ""));
               }
             }}
           />
