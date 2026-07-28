@@ -43,8 +43,7 @@ export const getCompany = async (req, res, next) => {
   }
 };
 
-// @desc  Create company with similarity & duplicate check
-// @route POST /api/companies
+
 export const createCompany = async (req, res, next) => {
   try {
     // Restrict employees from creating company records directly (or allow if required, but read-only edit/delete is enforced)
@@ -126,8 +125,6 @@ export const updateCompany = async (req, res, next) => {
   }
 };
 
-// @desc  Delete company (Managers only - Employees read-only)
-// @route DELETE /api/companies/:id
 export const deleteCompany = async (req, res, next) => {
   try {
     if (req.user?.role === "employee") {
@@ -144,8 +141,7 @@ export const deleteCompany = async (req, res, next) => {
   }
 };
 
-// @desc  Export companies as CSV
-// @route GET /api/companies/export/csv
+
 export const exportCompaniesCSV = async (req, res, next) => {
   try {
     const query = userFilter(req);
