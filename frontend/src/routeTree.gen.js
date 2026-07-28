@@ -16,6 +16,7 @@ import { Route as EmployeeLeadsRouteImport } from "./routes/employee.leads";
 import { Route as EmployeeDealsRouteImport } from "./routes/employee.deals";
 import { Route as EmployeeCompaniesRouteImport } from "./routes/employee.companies";
 import { Route as EmployeeProposalsRouteImport } from "./routes/employee.proposals";
+import { Route as EmployeeMeetingsRouteImport } from "./routes/employee.meetings";
 
 const LandingRoute = LandingRouteImport.update({
   id: "/landing",
@@ -102,6 +103,11 @@ const EmployeeProposalsRoute = EmployeeProposalsRouteImport.update({
   path: "/employee/proposals",
   getParentRoute: () => rootRouteImport,
 });
+const EmployeeMeetingsRoute = EmployeeMeetingsRouteImport.update({
+  id: "/employee/meetings",
+  path: "/employee/meetings",
+  getParentRoute: () => rootRouteImport,
+});
 
 const rootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -121,6 +127,7 @@ const rootRouteChildren = {
   EmployeeDealsRoute: EmployeeDealsRoute,
   EmployeeCompaniesRoute: EmployeeCompaniesRoute,
   EmployeeProposalsRoute: EmployeeProposalsRoute,
+  EmployeeMeetingsRoute: EmployeeMeetingsRoute,
 };
 
 export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren);

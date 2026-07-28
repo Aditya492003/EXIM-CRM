@@ -1,6 +1,6 @@
 import Meeting from "../models/Meeting.js";
 
-// @desc  Get all meetings (User-scoped — only current user's meetings)
+// @desc  Get all meetings (Manager-scoped — only meetings organized by current user)
 // @route GET /api/meetings
 export const getMeetings = async (req, res, next) => {
   try {
@@ -16,6 +16,35 @@ export const getMeetings = async (req, res, next) => {
       end.setDate(end.getDate() + 1);
       filter.date = { $gte: start, $lt: end };
     }
+
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { company: { $regex: search, $options: "i" } },
+        { attendee: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const [meetings, total] = await Promise.all([
+      Meeting.find(filter).sort({ date: 1 }).skip(skip).limit(Number(limit)),
+      Meeting.countDocuments(filter),
+    ]);
+
+    res.status(200).json({ success: true, total, page: Number(page), data: meetings });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Get meetings assigned to the current employee
+// @route GET /api/meetings/employee
+export const getEmployeeMeetings = async (req, res, next) => {
+  try {
+    const { status, search, page = 1, limit = 50 } = req.query;
+    const filter = { assignedToClerkId: req.user?.clerkId };
+
+    if (status) filter.status = status;
 
     if (search) {
       filter.$or = [
@@ -95,6 +124,33 @@ export const updateMeetingStatus = async (req, res, next) => {
       { new: true, runValidators: true }
     );
     if (!meeting) return res.status(404).json({ success: false, message: "Meeting not found" });
+
+    res.status(200).json({ success: true, data: meeting });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Update meeting outcome (Employee-scoped — only assigned employee can update)
+// @route PATCH /api/meetings/:id/outcome
+export const updateMeetingOutcome = async (req, res, next) => {
+  try {
+    const { outcomeStatus, outcomeNotes } = req.body;
+
+    if (!outcomeStatus) {
+      return res.status(400).json({ success: false, message: "outcomeStatus is required" });
+    }
+
+    // Scope to the assigned employee
+    const meeting = await Meeting.findOneAndUpdate(
+      { _id: req.params.id, assignedToClerkId: req.user?.clerkId },
+      { outcomeStatus, outcomeNotes: outcomeNotes || "" },
+      { new: true, runValidators: true }
+    );
+
+    if (!meeting) {
+      return res.status(404).json({ success: false, message: "Meeting not found or not assigned to you" });
+    }
 
     res.status(200).json({ success: true, data: meeting });
   } catch (error) {

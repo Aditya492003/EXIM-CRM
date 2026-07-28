@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Sparkles,
   Users,
+  Video,
 } from "lucide-react";
 
 const navSections = [
@@ -18,6 +19,7 @@ const navSections = [
       { to: "/employee/companies", label: "My Companies", icon: Building2 },
       { to: "/employee/leads", label: "My Leads", icon: Users },
       { to: "/employee/deals", label: "My Deals", icon: Handshake },
+      { to: "/employee/meetings", label: "My Meetings", icon: Video },
       { to: "/employee/proposals", label: "Proposal Approval", icon: FileText },
     ],
   },

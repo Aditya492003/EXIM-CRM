@@ -59,6 +59,21 @@ const MeetingSchema = new Schema({
   organizedByClerkId: {
     type: String
   },
+  assignedToClerkId: {
+    type: String // Clerk user ID of the assigned employee
+  },
+  assignedToName: {
+    type: String // Display name of the assigned employee (denormalized)
+  },
+  outcomeStatus: {
+    type: String,
+    enum: ['', 'Done', 'Postponed', 'Cancelled'],
+    default: ''
+  },
+  outcomeNotes: {
+    type: String,
+    default: ''
+  },
   createdDate: {
     type: Date,
     default: Date.now
