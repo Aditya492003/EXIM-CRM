@@ -15,23 +15,36 @@ import {
   X,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { proposalTemplates } from "@/data/dummy";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/proposals/templates")({
   component: TemplatesPage,
 });
 
+const defaultTemplates = [
+  {
+    id: "aeo-template",
+    name: "Engagement Letter — AEO T1 & T2",
+    description: "Standard ASC Group proposal engagement template with interactive DOCX placeholders.",
+    category: "General",
+    format: "DOCX",
+    status: "Published",
+    usedCount: 42,
+    fileUrl: "/proposal_template.docx"
+  }
+];
+
 function TemplatesPage() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [dragOver, setDragOver] = useState(false);
   const [uploads, setUploads] = useState([]);
+  const [templatesList, setTemplatesList] = useState(defaultTemplates);
   const [showModal, setShowModal] = useState(false);
   const inputRef = useRef(null);
 
   const categories = ["All", "General", "Government", "Retainer", "Milestone"];
-  const rows = proposalTemplates.filter((t) => {
+  const rows = templatesList.filter((t) => {
     const q = !query || t.name.toLowerCase().includes(query.toLowerCase()) || t.description.toLowerCase().includes(query.toLowerCase());
     const c = category === "All" || t.category === category;
     return q && c;

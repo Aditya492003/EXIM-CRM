@@ -1,24 +1,11 @@
 import Company from "../models/Company.js";
 
-// Helper: build user-scoped filter
+// Helper: build user-scoped filter (Companies are fully shared across Manager and Employee portals)
 const userFilter = (req, extra = {}) => {
-  const filter = { ...extra };
-  if (req.user?.role === "employee") {
-    const empMatch = [];
-    if (req.user.name) {
-      empMatch.push({ assignedManager: req.user.name });
-      empMatch.push({ assignedManager: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
-    }
-    if (req.user.clerkId) {
-      empMatch.push({ assignedManagerClerkId: req.user.clerkId });
-    }
-    filter.$or = empMatch.length > 0 ? empMatch : [{ assignedManager: "N/A" }];
-  }
-  // If manager, leave it empty to allow seeing all companies (Shared DB)
-  return filter;
+  return { ...extra };
 };
 
-// @desc  Get all companies (Shared across all users)
+// @desc  Get all companies (Shared across all users — Managers & Employees)
 // @route GET /api/companies
 export const getCompanies = async (req, res, next) => {
   try {
@@ -48,7 +35,7 @@ export const getCompany = async (req, res, next) => {
   try {
     const query = userFilter(req, { _id: req.params.id });
     const company = await Company.findOne(query);
-    if (!company) return res.status(404).json({ success: false, message: "Company not found or access denied" });
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
 
     res.status(200).json({ success: true, data: company });
   } catch (error) {
@@ -60,6 +47,7 @@ export const getCompany = async (req, res, next) => {
 // @route POST /api/companies
 export const createCompany = async (req, res, next) => {
   try {
+    // Restrict employees from creating company records directly (or allow if required, but read-only edit/delete is enforced)
     const { name, email, phone, gstin } = req.body;
 
     if (!name || !name.trim()) {
@@ -114,10 +102,14 @@ export const createCompany = async (req, res, next) => {
   }
 };
 
-// @desc  Update company
+// @desc  Update company (Managers only - Employees read-only)
 // @route PUT /api/companies/:id
 export const updateCompany = async (req, res, next) => {
   try {
+    if (req.user?.role === "employee") {
+      return res.status(403).json({ success: false, message: "Employees have read-only access to company records." });
+    }
+
     const updateData = { ...req.body };
     if (req.file?.path) updateData.logoUrl = req.file.path;
 
@@ -126,7 +118,7 @@ export const updateCompany = async (req, res, next) => {
       new: true,
       runValidators: true,
     });
-    if (!company) return res.status(404).json({ success: false, message: "Company not found or access denied" });
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
 
     res.status(200).json({ success: true, data: company });
   } catch (error) {
@@ -134,13 +126,17 @@ export const updateCompany = async (req, res, next) => {
   }
 };
 
-// @desc  Delete company
+// @desc  Delete company (Managers only - Employees read-only)
 // @route DELETE /api/companies/:id
 export const deleteCompany = async (req, res, next) => {
   try {
+    if (req.user?.role === "employee") {
+      return res.status(403).json({ success: false, message: "Employees have read-only access to company records." });
+    }
+
     const query = userFilter(req, { _id: req.params.id });
     const company = await Company.findOneAndDelete(query);
-    if (!company) return res.status(404).json({ success: false, message: "Company not found or access denied" });
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
 
     res.status(200).json({ success: true, message: "Company deleted" });
   } catch (error) {
@@ -157,13 +153,13 @@ export const exportCompaniesCSV = async (req, res, next) => {
 
     const headers = [
       "Name", "Industry", "Primary Contact", "Phone", "Email",
-      "Assigned Manager", "Status", "Revenue (₹)", "GSTIN", "PAN",
+      "Status", "Revenue (₹)", "GSTIN", "PAN",
       "Website", "Active Deals", "Won Deals", "Open Deals", "Lost Deals",
     ];
 
     const rows = companies.map((c) => [
       c.name, c.industry, c.primaryContact, c.phone, c.email,
-      c.assignedManager, c.status, c.revenue, c.gstin, c.pan,
+      c.status, c.revenue, c.gstin, c.pan,
       c.website, c.activeDeals, c.wonDeals, c.openDeals, c.lostDeals,
     ]);
 
@@ -182,6 +178,10 @@ export const exportCompaniesCSV = async (req, res, next) => {
 // @route POST /api/companies/bulk
 export const importCompaniesBulk = async (req, res, next) => {
   try {
+    if (req.user?.role === "employee") {
+      return res.status(403).json({ success: false, message: "Employees have read-only access to company records." });
+    }
+
     const { companies } = req.body;
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ success: false, message: "No company data provided" });

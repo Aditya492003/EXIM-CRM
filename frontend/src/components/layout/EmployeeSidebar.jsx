@@ -19,7 +19,7 @@ const navSections = [
     title: "Workspace",
     items: [
       { to: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { to: "/employee/companies", label: "My Companies", icon: Building2 },
+      { to: "/employee/companies", label: "Companies", icon: Building2 },
       { to: "/employee/leads", label: "My Leads", icon: Users },
       { to: "/employee/deals", label: "My Deals", icon: Handshake },
       { to: "/employee/meetings", label: "My Meetings", icon: Video },

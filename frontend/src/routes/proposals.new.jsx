@@ -26,7 +26,6 @@ import {
   Eye,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { companiesData, proposalTemplates, servicesList } from "@/data/dummy";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
@@ -69,8 +68,21 @@ function NewProposalPage() {
   const [assignedTo, setAssignedTo] = useState("");
   const [savingProposal, setSavingProposal] = useState(false);
 
+  const [dbCompanies, setDbCompanies] = useState([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [dbServices, setDbServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(true);
+
   useEffect(() => {
     api.get("/employees").then(res => setEmployees(res.data?.data || [])).catch(() => {});
+    api.get("/companies")
+      .then(res => setDbCompanies(res.data?.data || []))
+      .catch((err) => console.error("Failed to load companies for proposal", err))
+      .finally(() => setLoadingCompanies(false));
+    api.get("/services")
+      .then(res => setDbServices(res.data?.data || []))
+      .catch((err) => console.error("Failed to load services for proposal", err))
+      .finally(() => setLoadingServices(false));
   }, [api]);
 
   const handleSaveAndSendProposal = async () => {
@@ -167,8 +179,8 @@ function NewProposalPage() {
       setFormData((prev) => ({
         ...prev,
         client_name: clientObj.name,
-        contact_person: clientObj.primaryContact,
-        address: `${clientObj.industry} Sector, BKC, Mumbai`,
+        contact_person: clientObj.primaryContact || "Primary Contact",
+        address: clientObj.address || `${clientObj.industry || "General"} Sector`,
       }));
     }
   }, [clientObj]);
@@ -324,59 +336,69 @@ function NewProposalPage() {
         />
       </div>
       <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-        {companiesData
-          .filter((c) => !clientSearchQuery || c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()))
-          .slice(0, 10)
-          .map((c) => {
-            const isSelected = client === c.id;
-            return (
-              <button
-                key={c.id}
-                onClick={() => {
-                  setClient(c.id);
-                  setClientObj(c);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-xl border p-3.5 text-left transition",
-                  isSelected
-                    ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
-                    : "border-border bg-card hover:bg-muted/60"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                      isSelected ? "bg-indigo-600 text-white" : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {c.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold">{c.name}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {c.industry} · Contact: {c.primaryContact}
+        {loadingCompanies ? (
+          <div className="p-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+            <RefreshCw size={14} className="animate-spin text-indigo-500" /> Loading stored companies…
+          </div>
+        ) : dbCompanies.length === 0 ? (
+          <div className="p-8 text-center text-xs text-muted-foreground">
+            No companies found in database. Please create a company first in the Companies section.
+          </div>
+        ) : (
+          dbCompanies
+            .filter((c) => !clientSearchQuery || c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()))
+            .map((c) => {
+              const compId = c._id || c.id;
+              const isSelected = client === compId;
+              return (
+                <button
+                  key={compId}
+                  onClick={() => {
+                    setClient(compId);
+                    setClientObj(c);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl border p-3.5 text-left transition",
+                    isSelected
+                      ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
+                      : "border-border bg-card hover:bg-muted/60"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                        isSelected ? "bg-indigo-600 text-white" : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {c.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold">{c.name}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {c.industry || "General"} {c.primaryContact ? `· Contact: ${c.primaryContact}` : ""} {c.email ? `· ${c.email}` : ""}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
-                      c.status === "Active"
-                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                        : c.status === "Prospect"
-                          ? "bg-blue-50 text-blue-700 ring-blue-200"
-                          : "bg-slate-100 text-slate-700 ring-slate-200"
-                    )}
-                  >
-                    {c.status}
-                  </span>
-                  {isSelected && <Check size={16} className="text-indigo-600" />}
-                </div>
-              </button>
-            );
-          })}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+                        c.status === "Active"
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          : c.status === "Prospect"
+                            ? "bg-blue-50 text-blue-700 ring-blue-200"
+                            : "bg-slate-100 text-slate-700 ring-slate-200"
+                      )}
+                    >
+                      {c.status || "Active"}
+                    </span>
+                    {isSelected && <Check size={16} className="text-indigo-600" />}
+                  </div>
+                </button>
+              );
+            })
+        )}
       </div>
     </div>
   );
@@ -384,38 +406,50 @@ function NewProposalPage() {
   /* Step 2: Select Service */
   const ServiceStep = (
     <div className="space-y-4">
-      <StepHeader step={2} title="Select Advisory Service" sub="Select from 100+ EXIM & Customs services to auto-load fees." />
+      <StepHeader step={2} title="Select Advisory Service" sub="Select an active service from your workspace database to auto-load fees." />
       <div className="grid gap-3 sm:grid-cols-2">
-        {servicesList.map((s) => {
-          const isSelected = service === s.id;
-          return (
-            <button
-              key={s.id}
-              onClick={() => {
-                setService(s.id);
-                setServiceObj(s);
-              }}
-              className={cn(
-                "rounded-xl border p-4 text-left transition",
-                isSelected
-                  ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
-                  : "border-border bg-card hover:bg-muted/60"
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1">
-                  <div className="text-sm font-semibold">{s.name}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">{s.description}</div>
+        {loadingServices ? (
+          <div className="col-span-full p-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+            <RefreshCw size={14} className="animate-spin text-indigo-500" /> Loading stored services…
+          </div>
+        ) : dbServices.length === 0 ? (
+          <div className="col-span-full p-8 text-center text-xs text-muted-foreground">
+            No active services found in database. Please create a service first in the Services section.
+          </div>
+        ) : (
+          dbServices.map((s) => {
+            const servId = s._id || s.id;
+            const isSelected = service === servId;
+            const priceText = s.fee ? `₹${s.fee.toLocaleString("en-IN")}` : s.price || "₹0";
+            return (
+              <button
+                key={servId}
+                onClick={() => {
+                  setService(servId);
+                  setServiceObj({ ...s, price: priceText });
+                }}
+                className={cn(
+                  "rounded-xl border p-4 text-left transition cursor-pointer",
+                  isSelected
+                    ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
+                    : "border-border bg-card hover:bg-muted/60"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold">{s.name}</div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{s.description || "Advisory service"}</div>
+                  </div>
+                  {isSelected && <Check size={15} className="mt-0.5 shrink-0 text-indigo-600" />}
                 </div>
-                {isSelected && <Check size={15} className="mt-0.5 shrink-0 text-indigo-600" />}
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium">{s.category}</span>
-                <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{s.price}</span>
-              </div>
-            </button>
-          );
-        })}
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium">{s.category || "General"}</span>
+                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{priceText}</span>
+                </div>
+              </button>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -438,7 +472,7 @@ function NewProposalPage() {
             })
           }
           className={cn(
-            "rounded-2xl border-2 p-4 text-left transition",
+            "rounded-2xl border-2 p-4 text-left transition cursor-pointer",
             selectedTemplate.id === "aeo-template"
               ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
               : "border-border bg-card hover:bg-muted/60"
@@ -446,7 +480,7 @@ function NewProposalPage() {
         >
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-sm font-bold text-indigo-800 dark:text-indigo-300">📄 AEO T1/T2 Engagement Letter</div>
+              <div className="text-sm font-bold text-indigo-800 dark:text-indigo-300">📄 Engagement Letter Template</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">Standard ASC Group proposal template with placeholders</div>
             </div>
             {selectedTemplate.id === "aeo-template" && <Check size={16} className="text-indigo-600" />}
@@ -457,42 +491,40 @@ function NewProposalPage() {
           </div>
         </button>
 
-        {/* Dummy additional templates for 100+ services scaling */}
-        {proposalTemplates.map((t) => {
-          const isSelected = selectedTemplate.id === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() =>
+        {/* Custom DOCX File Uploader */}
+        <label className="rounded-2xl border-2 border-dashed border-border bg-card p-4 text-left hover:border-indigo-400 hover:bg-muted/60 transition cursor-pointer flex flex-col justify-between">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <Upload size={14} className="text-indigo-600" /> Upload Custom DOCX Template
+              </div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">Upload your own Word (.docx) file containing custom {"{tags}"}</div>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between text-[11px] text-indigo-600 font-semibold">
+            <span>Browse File…</span>
+            <span className="text-muted-foreground font-normal">.docx only</span>
+          </div>
+          <input
+            type="file"
+            accept=".docx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                const objectUrl = URL.createObjectURL(file);
                 setSelectedTemplate({
-                  id: t.id,
-                  name: t.name,
-                  fileUrl: "/proposal_template.docx",
-                  category: t.category,
-                  format: t.format,
-                })
+                  id: `custom-${Date.now()}`,
+                  name: file.name,
+                  fileUrl: objectUrl,
+                  category: "Custom Upload",
+                  format: "DOCX",
+                });
+                toast.success(`Loaded custom template "${file.name}"`);
               }
-              className={cn(
-                "rounded-2xl border p-4 text-left transition",
-                isSelected
-                  ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
-                  : "border-border bg-card hover:bg-muted/60"
-              )}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-sm font-semibold">{t.name}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">{t.description}</div>
-                </div>
-                {isSelected && <Check size={16} className="text-indigo-600" />}
-              </div>
-              <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Category: {t.category}</span>
-                <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium">{t.format}</span>
-              </div>
-            </button>
-          );
-        })}
+            }}
+          />
+        </label>
       </div>
     </div>
   );

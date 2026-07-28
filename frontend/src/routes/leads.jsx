@@ -10,7 +10,7 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
 import { StatusBadge } from "@/components/crm/StatusBadge";
-import { leads as dummyLeads, servicesList } from "@/data/dummy";
+import { leads as dummyLeads } from "@/data/dummy";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
@@ -20,7 +20,6 @@ export const Route = createFileRoute("/leads")({
 });
 
 const statuses = ["New", "Contacted", "Interested", "Proposal Sent", "Negotiation", "Converted", "Lost", "Inactive"];
-const serviceNames = servicesList.map((s) => s.name);
 const quickFilters = ["All Leads", "Today's Leads", "New Leads", "Unassigned", "Follow-up Today", "Overdue", "Favorites"];
 
 const ENQUIRY_STATUSES = ["Open", "In Progress", "Awaiting Response", "On Hold", "Qualified", "Closed - Won", "Closed - Dead"];
@@ -572,6 +571,46 @@ function EmployeeSelect({ value, onChange }) {
   );
 }
 
+// Reusable Service Select Component (Fetches live from DB)
+function ServiceSelect({ value, onChange }) {
+  const api = useApi();
+  const [services, setServices] = useState([]);
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const res = await api.get("/services");
+        const list = res.data?.data || [];
+        setServices(list);
+        if (!value && list.length > 0) {
+          onChange(list[0].name);
+        }
+      } catch (err) {
+        console.error("Failed to fetch services", err);
+      }
+    };
+    fetchServices();
+  }, [api]);
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 cursor-pointer"
+    >
+      {services.length === 0 ? (
+        <option value="">No services found</option>
+      ) : (
+        services.map((s) => (
+          <option key={s._id || s.name} value={s.name}>
+            {s.name} ({s.fee ? `₹${s.fee.toLocaleString("en-IN")}` : s.price || "₹0"})
+          </option>
+        ))
+      )}
+    </select>
+  );
+}
+
 /* ── Full Interactive Lead Detail Drawer ──────────────── */
 function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
   const [tab, setTab] = useState("overview");
@@ -798,9 +837,10 @@ function AddLeadModal({ onClose, onSuccess }) {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold">Service / Job *</label>
-              <select value={formData.service} onChange={(e) => setFormData({ ...formData, service: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
-                {serviceNames.map((s) => <option key={s}>{s}</option>)}
-              </select>
+              <ServiceSelect
+                value={formData.service}
+                onChange={(val) => setFormData({ ...formData, service: val })}
+              />
             </div>
             <div>
               <label className="mb-1 flex items-center text-xs font-semibold">
@@ -974,9 +1014,10 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold">Service / Job *</label>
-                <select value={formData.service} onChange={(e) => setFormData({ ...formData, service: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
-                  {serviceNames.map((s) => <option key={s}>{s}</option>)}
-                </select>
+                <ServiceSelect
+                  value={formData.service}
+                  onChange={(val) => setFormData({ ...formData, service: val })}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold">Phone</label>

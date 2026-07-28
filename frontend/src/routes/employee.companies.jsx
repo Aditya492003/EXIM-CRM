@@ -45,11 +45,11 @@ function EmployeeCompaniesPage() {
       <div className="space-y-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">My Companies</h1>
-            <p className="text-sm text-muted-foreground">{companies.length} companies assigned to you</p>
+            <h1 className="text-2xl font-bold tracking-tight">Companies Directory</h1>
+            <p className="text-sm text-muted-foreground">{companies.length} companies available in workspace (Shared Directory)</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={fetchCompanies} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition flex items-center gap-1.5">
+            <button onClick={fetchCompanies} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition flex items-center gap-1.5 cursor-pointer">
               <RefreshCw size={13} /> Refresh
             </button>
             <div className="relative w-full sm:w-72">
@@ -86,8 +86,7 @@ function EmployeeCompaniesPage() {
                   <tr>
                     <td colSpan="7" className="p-12 text-center">
                       <Building2 className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                      <p className="mt-2 text-sm text-muted-foreground">No companies assigned to you yet.</p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">Your manager will assign companies to you from the Manager Portal.</p>
+                      <p className="mt-2 text-sm text-muted-foreground">No companies found in database.</p>
                     </td>
                   </tr>
                 ) : (
@@ -131,8 +130,8 @@ function EmployeeCompaniesPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-700">
-          <span className="font-semibold">ℹ️ Note:</span> Companies are assigned to you by your manager via the <strong>Manager Portal → Companies</strong>. Changes to company details (like adding contacts or editing info) must be done by the manager.
+        <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 dark:bg-indigo-500/10 dark:border-indigo-500/20 p-4 text-xs text-indigo-700 dark:text-indigo-300">
+          <span className="font-semibold">ℹ️ Shared Company Directory:</span> All company records are shared across the workspace to streamline proposal generation and prevent data duplication. Employees can view all companies for reference and proposal building (read-only mode).
         </div>
       </div>
     </AppLayout>
