@@ -427,7 +427,7 @@ function IconButton({ children, onClick }) {
 }
 
 // Searchable Company Combobox Component
-function CompanySearchSelect({ value, onChange }) {
+function CompanySearchSelect({ value, onChange, onCompanySelect }) {
   const api = useApi();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -461,6 +461,8 @@ function CompanySearchSelect({ value, onChange }) {
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
+          // Clear autofill when user types manually
+          onCompanySelect?.(null);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
@@ -470,7 +472,7 @@ function CompanySearchSelect({ value, onChange }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl animate-fade-in">
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl animate-fade-in">
             {loading ? (
               <div className="p-2 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
                 <Loader2 size={12} className="animate-spin text-indigo-500" /> Loading companies…
@@ -482,15 +484,35 @@ function CompanySearchSelect({ value, onChange }) {
                   type="button"
                   onClick={() => {
                     onChange(c.name);
+                    onCompanySelect?.(c);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs text-left hover:bg-muted font-medium cursor-pointer transition"
+                  className="flex w-full flex-col rounded-lg px-3 py-2 text-xs text-left hover:bg-muted cursor-pointer transition gap-1"
                 >
-                  <div className="flex items-center gap-2">
-                    <Building2 size={13} className="text-indigo-500" />
-                    <span className="font-semibold text-foreground">{c.name}</span>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2">
+                      <Building2 size={13} className="text-indigo-500 shrink-0" />
+                      <span className="font-semibold text-foreground">{c.name}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.industry || "Company"}</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.industry || "Company"}</span>
+                  {/* Email & Phone availability hint */}
+                  <div className="flex items-center gap-3 pl-5">
+                    <span className={cn(
+                      "inline-flex items-center gap-1 text-[10px] font-medium",
+                      c.email ? "text-emerald-600" : "text-muted-foreground/60"
+                    )}>
+                      <Mail size={9} />
+                      {c.email ? c.email : "Email not saved"}
+                    </span>
+                    <span className={cn(
+                      "inline-flex items-center gap-1 text-[10px] font-medium",
+                      c.phone ? "text-emerald-600" : "text-muted-foreground/60"
+                    )}>
+                      <Phone size={9} />
+                      {c.phone ? c.phone : "Phone not saved"}
+                    </span>
+                  </div>
                 </button>
               ))
             ) : (
@@ -697,6 +719,7 @@ function InfoItem({ label, value, highlight, danger }) {
 function AddLeadModal({ onClose, onSuccess }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
+  const [autofilled, setAutofilled] = useState({ phone: false, email: false, websiteUrl: false });
   const [formData, setFormData] = useState({
     name: "",
     company: "",
@@ -710,6 +733,21 @@ function AddLeadModal({ onClose, onSuccess }) {
     region: "",
     notes: "",
   });
+
+  /* Auto-fill phone, email, website when a company is selected from dropdown */
+  const handleCompanySelect = (companyObj) => {
+    if (!companyObj) {
+      setAutofilled({ phone: false, email: false, websiteUrl: false });
+      return;
+    }
+    const updates = {};
+    const filled = { phone: false, email: false, websiteUrl: false };
+    if (companyObj.phone)   { updates.phone      = companyObj.phone;   filled.phone      = true; }
+    if (companyObj.email)   { updates.email      = companyObj.email;   filled.email      = true; }
+    if (companyObj.website) { updates.websiteUrl = companyObj.website; filled.websiteUrl = true; }
+    setFormData(prev => ({ ...prev, ...updates }));
+    setAutofilled(filled);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -726,6 +764,13 @@ function AddLeadModal({ onClose, onSuccess }) {
       setSubmitting(false);
     }
   };
+
+  /* Reusable autofill badge */
+  const AutofilledBadge = () => (
+    <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+      <CheckCircle2 size={9} /> Auto-filled
+    </span>
+  );
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
@@ -748,6 +793,7 @@ function AddLeadModal({ onClose, onSuccess }) {
               <CompanySearchSelect
                 value={formData.company}
                 onChange={(val) => setFormData({ ...formData, company: val })}
+                onCompanySelect={handleCompanySelect}
               />
             </div>
             <div>
@@ -757,12 +803,40 @@ function AddLeadModal({ onClose, onSuccess }) {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold">Phone</label>
-              <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+91 90000 12345" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              <label className="mb-1 flex items-center text-xs font-semibold">
+                Phone
+                {autofilled.phone && <AutofilledBadge />}
+              </label>
+              <input
+                value={formData.phone}
+                onChange={(e) => { setFormData({ ...formData, phone: e.target.value }); setAutofilled(p => ({ ...p, phone: false })); }}
+                placeholder={autofilled.phone ? "" : "+91 90000 12345"}
+                className={cn(
+                  "w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:ring-1",
+                  autofilled.phone
+                    ? "border-emerald-400 bg-emerald-50/60 text-emerald-800 focus:border-emerald-500 focus:ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200"
+                    : "border-border focus:border-indigo-400 focus:ring-indigo-100"
+                )}
+              />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold">Email *</label>
-              <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="name@company.com" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              <label className="mb-1 flex items-center text-xs font-semibold">
+                Email *
+                {autofilled.email && <AutofilledBadge />}
+              </label>
+              <input
+                required
+                type="email"
+                value={formData.email}
+                onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setAutofilled(p => ({ ...p, email: false })); }}
+                placeholder={autofilled.email ? "" : "name@company.com"}
+                className={cn(
+                  "w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:ring-1",
+                  autofilled.email
+                    ? "border-emerald-400 bg-emerald-50/60 text-emerald-800 focus:border-emerald-500 focus:ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200"
+                    : "border-border focus:border-indigo-400 focus:ring-indigo-100"
+                )}
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold">Source</label>
@@ -784,8 +858,21 @@ function AddLeadModal({ onClose, onSuccess }) {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold">Website URL</label>
-              <input value={formData.websiteUrl} onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })} placeholder="https://example.com" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              <label className="mb-1 flex items-center text-xs font-semibold">
+                Website URL
+                {autofilled.websiteUrl && <AutofilledBadge />}
+              </label>
+              <input
+                value={formData.websiteUrl}
+                onChange={(e) => { setFormData({ ...formData, websiteUrl: e.target.value }); setAutofilled(p => ({ ...p, websiteUrl: false })); }}
+                placeholder={autofilled.websiteUrl ? "" : "https://example.com"}
+                className={cn(
+                  "w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:ring-1",
+                  autofilled.websiteUrl
+                    ? "border-emerald-400 bg-emerald-50/60 text-emerald-800 focus:border-emerald-500 focus:ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200"
+                    : "border-border focus:border-indigo-400 focus:ring-indigo-100"
+                )}
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold">Region / Country</label>
@@ -807,6 +894,7 @@ function AddLeadModal({ onClose, onSuccess }) {
     </div>
   );
 }
+
 
 /* ── Rich Multi-Section Edit Lead Modal ───────────────── */
 function EditLeadModal({ lead, onClose, onSuccess }) {
