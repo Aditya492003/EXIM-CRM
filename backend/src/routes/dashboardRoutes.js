@@ -7,6 +7,7 @@ import {
   getDealsByStage,
   getLeadSources,
   getTeamPerformance,
+  globalSearch,
 } from "../controllers/dashboardController.js";
 
 const router = express.Router();
@@ -19,5 +20,6 @@ router.get("/revenue", getRevenue);
 router.get("/deals-by-stage", getDealsByStage);
 router.get("/lead-sources", getLeadSources);
 router.get("/performance", getTeamPerformance);
+router.get("/search", globalSearch);
 
 export default router;

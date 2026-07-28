@@ -5,7 +5,18 @@ import Meeting from "../models/Meeting.js";
 export const getMeetings = async (req, res, next) => {
   try {
     const { status, company, search, date, page = 1, limit = 50 } = req.query;
-    const filter = { organizedByClerkId: req.user?.clerkId };
+    const filter = {};
+
+    if (req.user?.role === "employee") {
+      filter.assignedToClerkId = req.user?.clerkId;
+    } else if (req.user?.clerkId) {
+      filter.$or = [
+        { organizedByClerkId: req.user.clerkId },
+        { organizedByClerkId: { $exists: false } },
+        { organizedByClerkId: null },
+        { organizedByClerkId: "" },
+      ];
+    }
 
     if (status) filter.status = status;
     if (company) filter.company = { $regex: company, $options: "i" };
@@ -18,16 +29,31 @@ export const getMeetings = async (req, res, next) => {
     }
 
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { company: { $regex: search, $options: "i" } },
-        { attendee: { $regex: search, $options: "i" } },
-      ];
+      const searchRegex = { $regex: search, $options: "i" };
+      if (filter.$or) {
+        filter.$and = [
+          { $or: filter.$or },
+          {
+            $or: [
+              { title: searchRegex },
+              { company: searchRegex },
+              { attendee: searchRegex },
+            ],
+          },
+        ];
+        delete filter.$or;
+      } else {
+        filter.$or = [
+          { title: searchRegex },
+          { company: searchRegex },
+          { attendee: searchRegex },
+        ];
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
     const [meetings, total] = await Promise.all([
-      Meeting.find(filter).sort({ date: 1 }).skip(skip).limit(Number(limit)),
+      Meeting.find(filter).sort({ createdDate: -1, date: 1 }).skip(skip).limit(Number(limit)),
       Meeting.countDocuments(filter),
     ]);
 

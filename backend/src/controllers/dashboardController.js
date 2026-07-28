@@ -199,3 +199,45 @@ export const getTeamPerformance = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc  Global search across Leads, Companies, Deals, Meetings, and Proposals
+// @route GET /api/dashboard/search
+export const globalSearch = async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    if (!q || !q.trim()) {
+      return res.status(200).json({
+        success: true,
+        data: { leads: [], companies: [], deals: [], meetings: [], proposals: [] },
+      });
+    }
+
+    const regex = new RegExp(q.trim(), "i");
+
+    const [leads, companies, deals, meetings, proposals] = await Promise.all([
+      Lead.find({
+        $or: [{ name: regex }, { company: regex }, { email: regex }, { phone: regex }],
+      }).limit(5),
+      Company.find({
+        $or: [{ name: regex }, { primaryContact: regex }, { industry: regex }, { email: regex }],
+      }).limit(5),
+      Deal.find({
+        $or: [{ title: regex }, { company: regex }, { contactPerson: regex }],
+      }).limit(5),
+      Meeting.find({
+        $or: [{ title: regex }, { company: regex }, { attendee: regex }],
+      }).limit(5),
+      Proposal.find({
+        $or: [{ title: regex }, { companyName: regex }, { proposalNumber: regex }],
+      }).limit(5),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: { leads, companies, deals, meetings, proposals },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

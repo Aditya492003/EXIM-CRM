@@ -1,10 +1,14 @@
-import { Bell, Plus, Search, Moon, Sun, LayoutDashboard, Users, Building2, Handshake, Globe, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import {
+  Bell, Plus, Search, Moon, Sun, LayoutDashboard, Users,
+  Building2, Handshake, Globe, UserPlus, FileText, Calendar,
+  Loader2, ArrowRight, X
+} from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { SignedIn, SignedOut, UserButton, SignInButton, SignUpButton, useUser } from "@clerk/clerk-react";
-import { UserAvatar } from "@/components/crm/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useApi } from "@/lib/api";
 
 export function TopBar() {
   const [dark, setDark] = useState(false);
@@ -14,6 +18,18 @@ export function TopBar() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
+
+  // Global Ctrl+K / Cmd+K keyboard shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setOpenSearch((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-background/70 backdrop-blur-xl">
@@ -28,10 +44,10 @@ export function TopBar() {
         <div className="relative ml-auto hidden max-w-md flex-1 md:ml-0 md:block">
           <button
             onClick={() => setOpenSearch(true)}
-            className="group flex w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2 text-left text-sm text-muted-foreground shadow-sm transition hover:border-primary/30 hover:shadow-md"
+            className="group flex w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2 text-left text-sm text-muted-foreground shadow-sm transition hover:border-primary/30 hover:shadow-md cursor-pointer"
           >
             <Search className="h-4 w-4" size={16} />
-            <span>Search leads, companies, deals…</span>
+            <span>Search leads, companies, deals, meetings…</span>
             <kbd className="ml-auto rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium">
               ⌘K
             </kbd>
@@ -48,19 +64,15 @@ export function TopBar() {
             <span>Landing Page</span>
           </Link>
 
-          <Button variant="ghost" size="icon" className="rounded-xl md:hidden" onClick={() => setOpenSearch(true)}>
+          <Button variant="ghost" size="icon" className="rounded-xl md:hidden cursor-pointer" onClick={() => setOpenSearch(true)}>
             <Search size={18} />
           </Button>
-          <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => setDark((d) => !d)}>
+          <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer" onClick={() => setDark((d) => !d)}>
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </Button>
-          <Button variant="ghost" size="icon" className="relative rounded-xl">
+          <Button variant="ghost" size="icon" className="relative rounded-xl cursor-pointer">
             <Bell size={18} />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-background" />
-          </Button>
-          <Button className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-500/20 hover:shadow-lg">
-            <Plus size={16} className="mr-1" />
-            <span className="hidden sm:inline">Quick Add</span>
           </Button>
 
           {/* Clerk Auth Managed Button */}
@@ -99,6 +111,7 @@ function MobileNav() {
     { to: "/leads", label: "Leads", icon: Users },
     { to: "/deals", label: "Deals", icon: Handshake },
     { to: "/companies", label: "Companies", icon: Building2 },
+    { to: "/meetings", label: "Meetings", icon: Calendar },
     { to: "/employees", label: "Employees", icon: UserPlus },
   ];
   return (
@@ -120,25 +133,238 @@ function MobileNav() {
 }
 
 function SearchPalette({ onClose }) {
-  const recent = ["Aarav Sharma", "Orion Exports", "Q3 Textile Export"];
-  const suggestions = ["Overdue follow-ups", "Won deals this month", "Unassigned leads"];
+  const api = useApi();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState({
+    leads: [],
+    companies: [],
+    deals: [],
+    meetings: [],
+    proposals: [],
+  });
+
+  // ESC key listener to close search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  // Live debounced search
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults({ leads: [], companies: [], deals: [], meetings: [], proposals: [] });
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const res = await api.get(`/dashboard/search?q=${encodeURIComponent(query.trim())}`);
+        setResults(res.data?.data || { leads: [], companies: [], deals: [], meetings: [], proposals: [] });
+      } catch (err) {
+        console.error("Global search error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query, api]);
+
+  const handleNavigate = (path) => {
+    onClose();
+    navigate({ to: path });
+  };
+
+  const totalResults =
+    results.leads.length +
+    results.companies.length +
+    results.deals.length +
+    results.meetings.length +
+    results.proposals.length;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 pt-24 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-      <div className={cn("w-full max-w-xl rounded-2xl border border-border bg-card p-3 shadow-2xl")} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 border-b border-border px-2 pb-3">
-          <Search size={16} className="text-muted-foreground" />
-          <input autoFocus placeholder="Search leads, companies, deals…" className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
-          <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px]">ESC</kbd>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/50 p-4 pt-20 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Search Header */}
+        <div className="flex items-center gap-3 border-b border-border px-4 py-3 bg-muted/30">
+          <Search size={18} className="text-indigo-500 shrink-0" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search leads, companies, deals, meetings, proposals…"
+            className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+          />
+          {loading && <Loader2 size={16} className="animate-spin text-indigo-500 shrink-0" />}
+          {query && !loading && (
+            <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
+              <X size={14} />
+            </button>
+          )}
+          <kbd className="rounded-md border border-border bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground shrink-0">
+            ESC
+          </kbd>
         </div>
-        <div className="p-2 text-xs">
-          <div className="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Recent</div>
-          {recent.map((r) => (
-            <div key={r} className="cursor-pointer rounded-lg px-2 py-2 hover:bg-muted">{r}</div>
-          ))}
-          <div className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Suggestions</div>
-          {suggestions.map((r) => (
-            <div key={r} className="cursor-pointer rounded-lg px-2 py-2 hover:bg-muted">{r}</div>
-          ))}
+
+        {/* Results Container */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar text-xs">
+          {!query.trim() ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <p className="font-semibold text-sm">Global CRM Search</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">
+                Type any company name, lead, deal, or meeting title to search in real-time.
+              </p>
+            </div>
+          ) : loading && totalResults === 0 ? (
+            <div className="py-12 text-center text-muted-foreground flex flex-col items-center gap-2">
+              <Loader2 size={20} className="animate-spin text-indigo-500" />
+              <span>Searching CRM database…</span>
+            </div>
+          ) : totalResults === 0 ? (
+            <div className="py-10 text-center text-muted-foreground">
+              <p className="font-semibold">No matches found for "{query}"</p>
+              <p className="mt-1 text-[11px]">Try checking for typos or searching by company name.</p>
+            </div>
+          ) : (
+            <>
+              {/* Companies */}
+              {results.companies.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Building2 size={12} className="text-blue-500" /> Companies ({results.companies.length})</span>
+                    <button onClick={() => handleNavigate("/companies")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                  </div>
+                  <div className="space-y-1 mt-1">
+                    {results.companies.map((c) => (
+                      <div
+                        key={c._id}
+                        onClick={() => handleNavigate("/companies")}
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
+                      >
+                        <div>
+                          <div className="font-semibold text-foreground text-sm">{c.name}</div>
+                          <div className="text-[11px] text-muted-foreground">{c.industry || "General"} · {c.primaryContact || "No primary contact"}</div>
+                        </div>
+                        <span className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[10px] font-medium">Company</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Leads */}
+              {results.leads.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Users size={12} className="text-emerald-500" /> Leads ({results.leads.length})</span>
+                    <button onClick={() => handleNavigate("/leads")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                  </div>
+                  <div className="space-y-1 mt-1">
+                    {results.leads.map((l) => (
+                      <div
+                        key={l._id}
+                        onClick={() => handleNavigate("/leads")}
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
+                      >
+                        <div>
+                          <div className="font-semibold text-foreground text-sm">{l.name}</div>
+                          <div className="text-[11px] text-muted-foreground">{l.company || "No company"} · {l.email || l.phone || "No contact"}</div>
+                        </div>
+                        <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-medium">{l.status || "Lead"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Deals */}
+              {results.deals.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Handshake size={12} className="text-amber-500" /> Deals ({results.deals.length})</span>
+                    <button onClick={() => handleNavigate("/deals")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                  </div>
+                  <div className="space-y-1 mt-1">
+                    {results.deals.map((d) => (
+                      <div
+                        key={d._id}
+                        onClick={() => handleNavigate("/deals")}
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
+                      >
+                        <div>
+                          <div className="font-semibold text-foreground text-sm">{d.title}</div>
+                          <div className="text-[11px] text-muted-foreground">{d.company || "No company"} · ₹{Number(d.value || 0).toLocaleString("en-IN")}</div>
+                        </div>
+                        <span className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-medium">{d.stage || "Deal"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Meetings */}
+              {results.meetings.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Calendar size={12} className="text-violet-500" /> Meetings ({results.meetings.length})</span>
+                    <button onClick={() => handleNavigate("/meetings")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                  </div>
+                  <div className="space-y-1 mt-1">
+                    {results.meetings.map((m) => (
+                      <div
+                        key={m._id}
+                        onClick={() => handleNavigate("/meetings")}
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
+                      >
+                        <div>
+                          <div className="font-semibold text-foreground text-sm">{m.title}</div>
+                          <div className="text-[11px] text-muted-foreground">{m.company || "No company"} · {m.attendee || m.date || "Scheduled"}</div>
+                        </div>
+                        <span className="rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-medium">{m.status || "Meeting"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Proposals */}
+              {results.proposals.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><FileText size={12} className="text-rose-500" /> Proposals ({results.proposals.length})</span>
+                    <button onClick={() => handleNavigate("/proposals")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                  </div>
+                  <div className="space-y-1 mt-1">
+                    {results.proposals.map((p) => (
+                      <div
+                        key={p._id}
+                        onClick={() => handleNavigate("/proposals")}
+                        className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
+                      >
+                        <div>
+                          <div className="font-semibold text-foreground text-sm">{p.title}</div>
+                          <div className="text-[11px] text-muted-foreground">{p.companyName || "No company"} · {p.proposalNumber || "Proposal"}</div>
+                        </div>
+                        <span className="rounded-full bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 text-[10px] font-medium">{p.status || "Proposal"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

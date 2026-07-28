@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
+import { CompanySearchCombobox } from "@/components/crm/CompanySearchCombobox";
 
 export const Route = createFileRoute("/meetings")({
   component: MeetingsPage,
@@ -311,7 +312,32 @@ function MeetingsPage() {
       {openAdd && (
         <AddMeetingModal
           onClose={() => setOpenAdd(false)}
-          onSuccess={fetchMeetings}
+          onSuccess={(createdMeeting) => {
+            setOpenAdd(false);
+            if (createdMeeting) {
+              const formattedMeeting = {
+                id: createdMeeting.code || createdMeeting._id,
+                _id: createdMeeting._id,
+                title: createdMeeting.title,
+                type: createdMeeting.type || "Discovery Call",
+                company: createdMeeting.company || "",
+                attendee: createdMeeting.attendee || "",
+                mode: createdMeeting.mode || "Virtual (Google Meet)",
+                date: createdMeeting.date ? new Date(createdMeeting.date).toISOString().slice(0, 10) : "",
+                time: createdMeeting.time || "10:00 AM",
+                duration: createdMeeting.duration || "30 min",
+                status: createdMeeting.status || "Scheduled",
+                notes: createdMeeting.notes || "",
+                link: createdMeeting.meetingLink || createdMeeting.link || "",
+                assignedToClerkId: createdMeeting.assignedToClerkId || "",
+                assignedToName: createdMeeting.assignedToName || "",
+                outcomeStatus: createdMeeting.outcomeStatus || "",
+                outcomeNotes: createdMeeting.outcomeNotes || "",
+              };
+              setMeetings((prev) => [formattedMeeting, ...prev]);
+            }
+            fetchMeetings();
+          }}
         />
       )}
     </AppLayout>
@@ -368,10 +394,10 @@ function AddMeetingModal({ onClose, onSuccess }) {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await api.post("/meetings", formData);
+      const res = await api.post("/meetings", formData);
       toast.success("Meeting scheduled successfully");
-      onSuccess?.();
-      onClose();
+      onSuccess?.(res.data?.data);
+      onClose?.();
     } catch (err) {
       console.error("Schedule meeting error", err);
       toast.error(
@@ -421,14 +447,21 @@ function AddMeetingModal({ onClose, onSuccess }) {
               <label className="mb-1 block text-xs font-semibold">
                 Company *
               </label>
-              <input
+              <CompanySearchCombobox
                 required
                 value={formData.company}
-                onChange={(e) =>
-                  setFormData({ ...formData, company: e.target.value })
+                onChange={(companyName) =>
+                  setFormData((prev) => ({ ...prev, company: companyName }))
                 }
-                placeholder="e.g. Tata Exports"
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                onSelectCompany={(selectedComp) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    company: selectedComp.name,
+                    companyId: selectedComp._id,
+                    attendee: prev.attendee || selectedComp.primaryContact || "",
+                  }));
+                }}
+                placeholder="Search or type company…"
               />
             </div>
             <div>
