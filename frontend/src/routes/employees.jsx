@@ -205,7 +205,15 @@ export default function EmployeesPage() {
                         <div className="text-[11px] text-muted-foreground">{emp.email}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <StatusPill status={emp.status} />
+                        <div className="space-y-1">
+                          <StatusPill status={emp.status} />
+                          {emp.workingStatus && (
+                            <div className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+                              <span className={cn("h-1.5 w-1.5 rounded-full inline-block", emp.workingStatus === "Available" ? "bg-emerald-500" : emp.workingStatus === "On Leave" ? "bg-amber-500" : "bg-blue-500")} />
+                              {emp.workingStatus}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {emp.joinedDate ? new Date(emp.joinedDate).toLocaleDateString("en-IN") : "—"}
@@ -305,20 +313,20 @@ function AddEmployeeModal({ onClose, onSuccess }) {
     phone: "",
     role: "Trade Consultant",
     department: "Sales",
-    status: "Active",
+    designation: "",
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await api.post("/employees", form);
-      toast.success("Employee added successfully");
+      await api.post("/employees/invite", form);
+      toast.success("Employee invited successfully. They will receive an email.");
       onSuccess?.();
       onClose();
     } catch (err) {
-      console.error("Failed to add employee", err);
-      toast.error(err.response?.data?.message || "Failed to add employee");
+      console.error("Failed to invite employee", err);
+      toast.error(err.response?.data?.message || "Failed to invite employee");
     } finally {
       setSubmitting(false);
     }
@@ -329,8 +337,8 @@ function AddEmployeeModal({ onClose, onSuccess }) {
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div>
-            <h2 className="text-lg font-bold">Add New Employee</h2>
-            <p className="text-xs text-muted-foreground">Register an advisor or representative.</p>
+            <h2 className="text-lg font-bold">Invite New Employee</h2>
+            <p className="text-xs text-muted-foreground">Register an advisor or representative and send an invitation.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
@@ -368,12 +376,21 @@ function AddEmployeeModal({ onClose, onSuccess }) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold">Role / Designation *</label>
+              <label className="mb-1 block text-xs font-semibold">Role *</label>
               <input
                 required
                 value={form.role}
                 onChange={(e) => setForm({ ...form, role: e.target.value })}
                 placeholder="e.g. Senior Trade Advisor"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Designation</label>
+              <input
+                value={form.designation}
+                onChange={(e) => setForm({ ...form, designation: e.target.value })}
+                placeholder="e.g. Consultant"
                 className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
               />
             </div>
@@ -387,16 +404,6 @@ function AddEmployeeModal({ onClose, onSuccess }) {
                 {DEPARTMENTS.map((d) => <option key={d}>{d}</option>)}
               </select>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold">Status *</label>
-              <select
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              >
-                {STATUSES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </div>
           </div>
 
           <div className="flex justify-end gap-2 border-t border-border pt-4">
@@ -408,7 +415,7 @@ function AddEmployeeModal({ onClose, onSuccess }) {
               disabled={submitting}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50"
             >
-              {submitting && <Loader2 size={14} className="animate-spin" />} Create Employee
+              {submitting && <Loader2 size={14} className="animate-spin" />} Invite Employee
             </button>
           </div>
         </form>
@@ -560,8 +567,17 @@ function EmployeeDetailDrawer({ employee, onClose, onEdit, onDelete }) {
                 <div className="mt-0.5 text-sm font-semibold text-indigo-600">{employee.department}</div>
               </div>
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">System Status</div>
                 <div className="mt-1"><StatusPill status={employee.status} /></div>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Working Status</div>
+                <div className="mt-0.5 font-medium text-foreground">
+                  {employee.workingStatus === "Available" && "🟢 Available"}
+                  {employee.workingStatus === "Working on Leads" && "🟡 Working on Leads"}
+                  {employee.workingStatus === "On Leave" && "🔴 On Leave"}
+                  {!employee.workingStatus && "🟢 Available"}
+                </div>
               </div>
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Email</div>
@@ -575,6 +591,12 @@ function EmployeeDetailDrawer({ employee, onClose, onEdit, onDelete }) {
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Joined Date</div>
                 <div className="mt-0.5 font-medium text-foreground">
                   {employee.joinedDate ? new Date(employee.joinedDate).toLocaleDateString("en-IN") : "Recently"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Last Login</div>
+                <div className="mt-0.5 font-medium text-foreground">
+                  {employee.lastLogin ? new Date(employee.lastLogin).toLocaleString("en-IN") : "Never logged in"}
                 </div>
               </div>
             </div>

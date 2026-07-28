@@ -3,7 +3,6 @@ const lastNames = ["Sharma", "Patel", "Verma", "Kumar", "Reddy", "Gupta", "Singh
 const companies = ["Meridian Trade Co.", "Orion Exports", "Zenith Global", "Northwind Logistics", "Silverline Imports", "Apex Commerce", "Cedar & Co.", "Blueharbor Freight", "Ivory Traders", "Vanguard Shipping", "Summit Cargo", "Aurora Exim", "Kestrel Group", "Pacific Rim Traders", "Ironwood Industries", "Delta Bay Exports", "Halcyon Trade", "Monsoon Merchants", "Terra Nova Logistics", "Crestwave Global"];
 const industries = ["Textiles", "Electronics", "Pharmaceuticals", "Agriculture", "Automotive", "Chemicals", "Machinery", "Food & Beverage", "Metals", "Consumer Goods"];
 const sources = ["Website", "Referral", "LinkedIn", "Cold Call", "Trade Show", "Email Campaign", "Partner", "Google Ads"];
-const salespeople = ["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai", "Varun Iyer", "Zara Khan"];
 const statuses = ["New", "Contacted", "Interested", "Proposal Sent", "Negotiation", "Converted", "Lost", "Inactive"];
 
 function seed(i) {
@@ -48,7 +47,7 @@ export const leads = Array.from({ length: 50 }, (_, i) => {
     email: `${first.toLowerCase()}.${last.toLowerCase()}@${co.toLowerCase().replace(/[^a-z]/g, "").slice(0, 10)}.com`,
     service: pick(serviceNames, i, 12),
     source: pick(sources, i, 6),
-    assignedTo: pick(salespeople, i, 7),
+    assignedTo: "Unassigned",
     status: pick(statuses, i, 8),
     createdDate: daysAgo(Math.floor(seed(i + 9) * 60)),
     lastContacted: daysAgo(Math.floor(seed(i + 10) * 20)),
@@ -67,7 +66,7 @@ export const companiesData = Array.from({ length: 20 }, (_, i) => {
     primaryContact: contact,
     phone: `+91 ${90000 + Math.floor(seed(i + 23) * 9999)} ${10000 + Math.floor(seed(i + 24) * 89999)}`,
     email: `contact@${name.toLowerCase().replace(/[^a-z]/g, "").slice(0, 10)}.com`,
-    assignedManager: pick(salespeople, i, 25),
+    assignedManager: "Unassigned",
     activeDeals: active,
     createdDate: daysAgo(Math.floor(seed(i + 26) * 200)),
     status: ["Active", "Inactive", "Prospect"][Math.floor(seed(i + 27) * 3)],
@@ -104,21 +103,21 @@ export const deals = Array.from({ length: 30 }, (_, i) => ({
   name: `${pick(dealNames, i, 40)} #${i + 1}`,
   company: pick(companies, i, 41),
   value: Math.floor(seed(i + 42) * 900000) + 50000,
-  owner: pick(salespeople, i, 43),
+  owner: "Unassigned",
   expectedClose: daysAhead(Math.floor(seed(i + 44) * 90)),
   priority: pick(priorities, i, 45),
   stage: pick(dealStages, i, 46),
 }));
 
 export const activities = [
-  { id: "a1", type: "lead", title: "New lead created", subtitle: "Aarav Sharma — Meridian Trade Co.", time: "5m ago", actor: "Nikhil Rao" },
-  { id: "a2", type: "deal", title: "Deal moved to Negotiation", subtitle: "Pharma Bulk Order — $124,500", time: "22m ago", actor: "Simran Kaur" },
-  { id: "a3", type: "meeting", title: "Meeting scheduled", subtitle: "With Priya Patel · Tomorrow 3:00 PM", time: "1h ago", actor: "Kabir Malhotra" },
-  { id: "a4", type: "proposal", title: "Proposal sent", subtitle: "Q3 Textile Export — Orion Exports", time: "3h ago", actor: "Anjali Desai" },
-  { id: "a5", type: "company", title: "New company added", subtitle: "Halcyon Trade", time: "5h ago", actor: "Varun Iyer" },
-  { id: "a6", type: "call", title: "Call logged", subtitle: "Rohan Verma — 12 min", time: "Yesterday", actor: "Zara Khan" },
-  { id: "a7", type: "email", title: "Email opened", subtitle: "Follow-up · Vanguard Shipping", time: "Yesterday", actor: "Nikhil Rao" },
-  { id: "a8", type: "note", title: "Note added", subtitle: "Client wants revised pricing by Friday", time: "2d ago", actor: "Simran Kaur" },
+  { id: "a1", type: "lead", title: "New lead created", subtitle: "Aarav Sharma — Meridian Trade Co.", time: "5m ago", actor: "System" },
+  { id: "a2", type: "deal", title: "Deal moved to Negotiation", subtitle: "Pharma Bulk Order — $124,500", time: "22m ago", actor: "System" },
+  { id: "a3", type: "meeting", title: "Meeting scheduled", subtitle: "With Priya Patel · Tomorrow 3:00 PM", time: "1h ago", actor: "System" },
+  { id: "a4", type: "proposal", title: "Proposal sent", subtitle: "Q3 Textile Export — Orion Exports", time: "3h ago", actor: "System" },
+  { id: "a5", type: "company", title: "New company added", subtitle: "Halcyon Trade", time: "5h ago", actor: "System" },
+  { id: "a6", type: "call", title: "Call logged", subtitle: "Rohan Verma — 12 min", time: "Yesterday", actor: "System" },
+  { id: "a7", type: "email", title: "Email opened", subtitle: "Follow-up · Vanguard Shipping", time: "Yesterday", actor: "System" },
+  { id: "a8", type: "note", title: "Note added", subtitle: "Client wants revised pricing by Friday", time: "2d ago", actor: "System" },
 ];
 
 export const tasks = [
@@ -159,13 +158,7 @@ export const monthlyRevenue = [
   { month: "Nov", revenue: 348000 }, { month: "Dec", revenue: 392000 },
 ];
 
-export const performance = salespeople.map((name, i) => ({
-  name,
-  target: 100,
-  achieved: 45 + Math.floor(seed(i + 60) * 55),
-  deals: 5 + Math.floor(seed(i + 61) * 15),
-  revenue: 80000 + Math.floor(seed(i + 62) * 250000),
-}));
+export const performance = [];
 
 export const statusColors = {
   New: "bg-blue-100 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30",
@@ -236,7 +229,7 @@ export const proposals = Array.from({ length: 24 }, (_, i) => {
     value: Math.floor(seed(i + 74) * 900000) + 50000,
     billing: billingModes[Math.floor(seed(i + 75) * billingModes.length)],
     status: pick(proposalStatuses, i, 76),
-    owner: pick(salespeople, i, 77),
+    owner: "Unassigned",
     createdDate: daysAgo(Math.floor(seed(i + 78) * 45)),
     validTill: daysAhead(Math.floor(seed(i + 79) * 45) + 5),
     template: pick(templates, i, 80),

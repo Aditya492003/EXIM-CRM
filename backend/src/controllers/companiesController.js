@@ -1,11 +1,29 @@
 import Company from "../models/Company.js";
 
+// Helper: build user-scoped filter
+const userFilter = (req, extra = {}) => {
+  const filter = { ...extra };
+  if (req.user?.role === "employee") {
+    const empMatch = [];
+    if (req.user.name) {
+      empMatch.push({ assignedManager: req.user.name });
+      empMatch.push({ assignedManager: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
+    }
+    if (req.user.clerkId) {
+      empMatch.push({ assignedManagerClerkId: req.user.clerkId });
+    }
+    filter.$or = empMatch.length > 0 ? empMatch : [{ assignedManager: "N/A" }];
+  }
+  // If manager, leave it empty to allow seeing all companies (Shared DB)
+  return filter;
+};
+
 // @desc  Get all companies (Shared across all users)
 // @route GET /api/companies
 export const getCompanies = async (req, res, next) => {
   try {
     const { status, industry, manager, search, page = 1, limit = 100 } = req.query;
-    const filter = {};
+    const filter = userFilter(req);
 
     if (status && status !== "All") filter.status = status;
     if (industry && industry !== "All") filter.industry = industry;
@@ -28,8 +46,9 @@ export const getCompanies = async (req, res, next) => {
 // @route GET /api/companies/:id
 export const getCompany = async (req, res, next) => {
   try {
-    const company = await Company.findById(req.params.id);
-    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+    const query = userFilter(req, { _id: req.params.id });
+    const company = await Company.findOne(query);
+    if (!company) return res.status(404).json({ success: false, message: "Company not found or access denied" });
 
     res.status(200).json({ success: true, data: company });
   } catch (error) {
@@ -102,11 +121,12 @@ export const updateCompany = async (req, res, next) => {
     const updateData = { ...req.body };
     if (req.file?.path) updateData.logoUrl = req.file.path;
 
-    const company = await Company.findByIdAndUpdate(req.params.id, updateData, {
+    const query = userFilter(req, { _id: req.params.id });
+    const company = await Company.findOneAndUpdate(query, updateData, {
       new: true,
       runValidators: true,
     });
-    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+    if (!company) return res.status(404).json({ success: false, message: "Company not found or access denied" });
 
     res.status(200).json({ success: true, data: company });
   } catch (error) {
@@ -118,8 +138,9 @@ export const updateCompany = async (req, res, next) => {
 // @route DELETE /api/companies/:id
 export const deleteCompany = async (req, res, next) => {
   try {
-    const company = await Company.findByIdAndDelete(req.params.id);
-    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+    const query = userFilter(req, { _id: req.params.id });
+    const company = await Company.findOneAndDelete(query);
+    if (!company) return res.status(404).json({ success: false, message: "Company not found or access denied" });
 
     res.status(200).json({ success: true, message: "Company deleted" });
   } catch (error) {
@@ -131,7 +152,8 @@ export const deleteCompany = async (req, res, next) => {
 // @route GET /api/companies/export/csv
 export const exportCompaniesCSV = async (req, res, next) => {
   try {
-    const companies = await Company.find({}).lean();
+    const query = userFilter(req);
+    const companies = await Company.find(query).lean();
 
     const headers = [
       "Name", "Industry", "Primary Contact", "Phone", "Email",

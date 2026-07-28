@@ -28,6 +28,8 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout";
 import { companiesData, proposalTemplates, servicesList } from "@/data/dummy";
 import { cn } from "@/lib/utils";
+import { useApi } from "@/lib/api";
+import { toast } from "sonner";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
 import { renderAsync } from "docx-preview";
@@ -61,11 +63,47 @@ const DEFAULT_PLACEHOLDERS = [
 
 function NewProposalPage() {
   const navigate = useNavigate();
+  const api = useApi();
   const [stepIdx, setStepIdx] = useState(0);
   const [saved, setSaved] = useState(false);
   const [approved, setApproved] = useState(false);
   const [approver, setApprover] = useState("Nikhil Rao (Sales Lead)");
   const [approverNote, setApproverNote] = useState("");
+  const [employees, setEmployees] = useState([]);
+  const [assignedTo, setAssignedTo] = useState("");
+  const [savingProposal, setSavingProposal] = useState(false);
+
+  useEffect(() => {
+    api.get("/employees").then(res => setEmployees(res.data?.data || [])).catch(() => {});
+  }, [api]);
+
+  const handleSaveProposal = async (statusOverride = "Draft") => {
+    try {
+      setSavingProposal(true);
+      const numericValue = parseFloat(String(formData.service_fee || "").replace(/[^0-9.]/g, "")) || 0;
+      const payload = {
+        title: `${formData.client_name || "Client"} - Proposal`,
+        client: formData.client_name || clientObj?.name || "Client",
+        service: serviceObj?.title || serviceObj?.name || "Services",
+        value: numericValue,
+        status: statusOverride,
+        validTill: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        assignedTo: assignedTo || null,
+      };
+      const res = await api.post("/proposals", payload);
+      if (res.data?.success) {
+        toast.success(`Proposal saved successfully as "${statusOverride}"!`);
+        setSaved(true);
+        if (statusOverride === "Approved" || statusOverride === "Under Review") {
+          setApproved(true);
+        }
+      }
+    } catch (err) {
+      toast.error("Failed to save proposal to database");
+    } finally {
+      setSavingProposal(false);
+    }
+  };
 
   /* Selection States */
   const [client, setClient] = useState(null);
@@ -597,6 +635,20 @@ function NewProposalPage() {
   const SaveStep = (
     <div className="space-y-5">
       <StepHeader step={5} title="Save Proposal" sub="Review final placeholder data and save proposal to pipeline." />
+      <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+        <label className="block text-xs font-semibold">Assign Proposal to Employee</label>
+        <select
+          value={assignedTo}
+          onChange={(e) => setAssignedTo(e.target.value)}
+          className={inputCls}
+        >
+          <option value="">— Unassigned (Manager Only) —</option>
+          {employees.map((e) => (
+            <option key={e._id} value={e.name}>{e.name} ({e.role || e.department || "Employee"})</option>
+          ))}
+        </select>
+      </div>
+
       <div className="divide-y divide-border rounded-2xl border border-border bg-card shadow-sm">
         {DEFAULT_PLACEHOLDERS.map((ph) => (
           <div key={ph.key} className="flex items-center justify-between px-5 py-3 text-sm">
@@ -607,14 +659,15 @@ function NewProposalPage() {
       </div>
       {!saved ? (
         <button
-          onClick={() => setSaved(true)}
-          className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 transition hover:-translate-y-0.5 hover:shadow-xl"
+          onClick={() => handleSaveProposal("Draft")}
+          disabled={savingProposal}
+          className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-60"
         >
-          <Save size={15} /> Save Proposal Draft
+          <Save size={15} /> {savingProposal ? "Saving to Database…" : "Save Proposal Draft"}
         </button>
       ) : (
         <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-          <CheckCircle2 size={16} /> Proposal saved successfully!
+          <CheckCircle2 size={16} /> Proposal saved to MongoDB successfully!
         </div>
       )}
     </div>
@@ -647,14 +700,15 @@ function NewProposalPage() {
         </div>
         {!approved ? (
           <button
-            onClick={() => setApproved(true)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:-translate-y-0.5 hover:shadow-xl"
+            onClick={() => handleSaveProposal("Under Review")}
+            disabled={savingProposal}
+            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-60"
           >
-            <Shield size={15} /> Submit for Approval
+            <Shield size={15} /> {savingProposal ? "Submitting…" : "Submit for Approval"}
           </button>
         ) : (
           <div className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
-            <CheckCircle2 size={16} /> Approved by <span className="ml-1 font-bold">{approver}</span>
+            <CheckCircle2 size={16} /> Approved & Saved to Database!
           </div>
         )}
       </div>

@@ -1,40 +1,41 @@
 import Deal from "../models/Deal.js";
 
+// Helper: build user-scoped filter
+const userFilter = (req, extra = {}) => {
+  const filter = { ...extra };
+  if (req.user?.role === "employee") {
+    const empMatch = [];
+    if (req.user.name) {
+      empMatch.push({ assignedTo: req.user.name });
+      empMatch.push({ assignedTo: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
+    }
+    if (req.user.clerkId) {
+      empMatch.push({ assignedToClerkId: req.user.clerkId });
+    }
+    filter.$or = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+  } else {
+    filter.createdByClerkId = req.user?.clerkId;
+  }
+  return filter;
+};
+
 // @desc  Get user's deals (Private to user - Deals are not shared across users)
 // @route GET /api/deals
 export const getDeals = async (req, res, next) => {
   try {
     const { stage, priority, assignedTo, search, page = 1, limit = 50 } = req.query;
-    const filter = {};
-
-    // Strict User Scoping for Deals: Users only see deals created by them (or unassigned legacy deals)
-    if (req.user?.clerkId) {
-      filter.$or = [
-        { createdByClerkId: req.user.clerkId },
-        { createdByClerkId: { $exists: false } },
-        { createdByClerkId: null },
-      ];
-    }
+    const filter = userFilter(req);
 
     if (stage && stage !== "All") filter.stage = stage;
     if (priority && priority !== "All") filter.priority = priority;
-    if (assignedTo && assignedTo !== "All") filter.assignedTo = { $regex: assignedTo, $options: "i" };
+    // Only apply assignedTo query filter for managers
+    if (assignedTo && assignedTo !== "All" && req.user?.role !== "employee") filter.assignedTo = { $regex: assignedTo, $options: "i" };
 
     if (search) {
-      const searchFilter = [
+      filter.$or = [
         { name: { $regex: search, $options: "i" } },
         { company: { $regex: search, $options: "i" } },
       ];
-      if (filter.$or) {
-        // Combine user scoping with search query using $and
-        filter.$and = [
-          { $or: filter.$or },
-          { $or: searchFilter }
-        ];
-        delete filter.$or;
-      } else {
-        filter.$or = searchFilter;
-      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -53,13 +54,9 @@ export const getDeals = async (req, res, next) => {
 // @route GET /api/deals/:id
 export const getDeal = async (req, res, next) => {
   try {
-    const deal = await Deal.findById(req.params.id);
-    if (!deal) return res.status(404).json({ success: false, message: "Deal not found" });
-
-    // Ensure user owns the deal
-    if (deal.createdByClerkId && req.user?.clerkId && deal.createdByClerkId !== req.user.clerkId) {
-      return res.status(403).json({ success: false, message: "Access denied. Deals are private to their creator." });
-    }
+    const query = userFilter(req, { _id: req.params.id });
+    const deal = await Deal.findOne(query);
+    if (!deal) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
 
     res.status(200).json({ success: true, data: deal });
   } catch (error) {
@@ -86,11 +83,12 @@ export const createDeal = async (req, res, next) => {
 // @route PUT /api/deals/:id
 export const updateDeal = async (req, res, next) => {
   try {
-    const deal = await Deal.findByIdAndUpdate(req.params.id, req.body, {
+    const query = userFilter(req, { _id: req.params.id });
+    const deal = await Deal.findOneAndUpdate(query, req.body, {
       new: true,
       runValidators: true,
     });
-    if (!deal) return res.status(404).json({ success: false, message: "Deal not found" });
+    if (!deal) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
 
     res.status(200).json({ success: true, data: deal });
   } catch (error) {
@@ -117,11 +115,12 @@ export const updateDealStage = async (req, res, next) => {
       updateData.closedDate = null;
     }
 
-    const deal = await Deal.findByIdAndUpdate(req.params.id, updateData, {
+    const query = userFilter(req, { _id: req.params.id });
+    const deal = await Deal.findOneAndUpdate(query, updateData, {
       new: true,
       runValidators: true,
     });
-    if (!deal) return res.status(404).json({ success: false, message: "Deal not found" });
+    if (!deal) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
 
     res.status(200).json({ success: true, data: deal });
   } catch (error) {
@@ -133,10 +132,30 @@ export const updateDealStage = async (req, res, next) => {
 // @route DELETE /api/deals/:id
 export const deleteDeal = async (req, res, next) => {
   try {
-    const deal = await Deal.findByIdAndDelete(req.params.id);
-    if (!deal) return res.status(404).json({ success: false, message: "Deal not found" });
+    const query = userFilter(req, { _id: req.params.id });
+    const deal = await Deal.findOneAndDelete(query);
+    if (!deal) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
 
     res.status(200).json({ success: true, message: "Deal deleted" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Update deal notes/expected close (Employee can update on their assigned deals)
+// @route PATCH /api/deals/:id/notes
+export const updateDealNotes = async (req, res, next) => {
+  try {
+    const { notes, expectedClose } = req.body;
+    const query = userFilter(req, { _id: req.params.id });
+    const updateData = {};
+    if (notes !== undefined) updateData.notes = notes;
+    if (expectedClose !== undefined) updateData.expectedCloseDate = expectedClose;
+
+    const deal = await Deal.findOneAndUpdate(query, updateData, { new: true });
+    if (!deal) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
+
+    res.status(200).json({ success: true, data: deal });
   } catch (error) {
     next(error);
   }

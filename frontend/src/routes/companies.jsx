@@ -20,9 +20,7 @@ const industriesList = [
   "Chemicals", "Machinery", "Food & Beverage", "Metals", "Consumer Goods", "Services", "Other"
 ];
 
-const managersList = [
-  "Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai", "Varun Iyer", "Zara Khan"
-];
+
 
 export default function CompaniesPage() {
   const api = useApi();
@@ -442,7 +440,7 @@ function AddCompanyModal({ existingCompanies = [], onClose, onSuccess }) {
     address: "",
     gstin: "",
     pan: "",
-    assignedManager: managersList[0],
+    assignedManager: "",
     status: "Active",
     notes: "",
   });
@@ -976,7 +974,7 @@ function EditCompanyModal({ company, onClose, onSuccess }) {
     address: company?.address || "",
     gstin: company?.gstin || "",
     pan: company?.pan || "",
-    assignedManager: company?.assignedManager || managersList[0],
+    assignedManager: company?.assignedManager || "",
     status: company?.status || "Active",
     notes: company?.notes || "",
   });
@@ -1048,13 +1046,10 @@ function EditCompanyModal({ company, onClose, onSuccess }) {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold">Assigned Account Manager</label>
-                <select
+                <EmployeeSelectDropdown
                   value={formData.assignedManager}
-                  onChange={(e) => setFormData({ ...formData, assignedManager: e.target.value })}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
-                >
-                  {managersList.map((m) => <option key={m}>{m}</option>)}
-                </select>
+                  onChange={(val) => setFormData({ ...formData, assignedManager: val })}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold">Phone Number</label>
@@ -1245,4 +1240,29 @@ function mapHeaders(headers) {
     }
   });
   return map;
+}
+
+// Reusable Employee Select Dropdown (fetches from DB)
+function EmployeeSelectDropdown({ value, onChange }) {
+  const api = useApi();
+  const [employees, setEmployees] = useState([]);
+
+  useEffect(() => {
+    api.get("/employees").then(res => {
+      setEmployees(res.data?.data || []);
+    }).catch(() => {});
+  }, [api]);
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+    >
+      <option value="">— Unassigned —</option>
+      {employees.map((e) => (
+        <option key={e._id} value={e.name}>{e.name} ({e.role || e.department || "Employee"})</option>
+      ))}
+    </select>
+  );
 }

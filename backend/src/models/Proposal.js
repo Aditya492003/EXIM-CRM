@@ -57,6 +57,10 @@ const ProposalSchema = new Schema({
   templateId: {
     type: Schema.Types.ObjectId
   },
+  assignedTo: {
+    type: String,
+    trim: true
+  },
   createdByClerkId: {
     type: String
   },

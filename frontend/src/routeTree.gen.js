@@ -11,6 +11,11 @@ import { Route as IndexRouteImport } from "./routes/index";
 import { Route as ProposalsIndexRouteImport } from "./routes/proposals.index";
 import { Route as ProposalsTemplatesRouteImport } from "./routes/proposals.templates";
 import { Route as ProposalsNewRouteImport } from "./routes/proposals.new";
+import { Route as EmployeeDashboardRouteImport } from "./routes/employee.dashboard";
+import { Route as EmployeeLeadsRouteImport } from "./routes/employee.leads";
+import { Route as EmployeeDealsRouteImport } from "./routes/employee.deals";
+import { Route as EmployeeCompaniesRouteImport } from "./routes/employee.companies";
+import { Route as EmployeeProposalsRouteImport } from "./routes/employee.proposals";
 
 const LandingRoute = LandingRouteImport.update({
   id: "/landing",
@@ -72,6 +77,31 @@ const ProposalsNewRoute = ProposalsNewRouteImport.update({
   path: "/proposals/new",
   getParentRoute: () => rootRouteImport,
 });
+const EmployeeDashboardRoute = EmployeeDashboardRouteImport.update({
+  id: "/employee/dashboard",
+  path: "/employee/dashboard",
+  getParentRoute: () => rootRouteImport,
+});
+const EmployeeLeadsRoute = EmployeeLeadsRouteImport.update({
+  id: "/employee/leads",
+  path: "/employee/leads",
+  getParentRoute: () => rootRouteImport,
+});
+const EmployeeDealsRoute = EmployeeDealsRouteImport.update({
+  id: "/employee/deals",
+  path: "/employee/deals",
+  getParentRoute: () => rootRouteImport,
+});
+const EmployeeCompaniesRoute = EmployeeCompaniesRouteImport.update({
+  id: "/employee/companies",
+  path: "/employee/companies",
+  getParentRoute: () => rootRouteImport,
+});
+const EmployeeProposalsRoute = EmployeeProposalsRouteImport.update({
+  id: "/employee/proposals",
+  path: "/employee/proposals",
+  getParentRoute: () => rootRouteImport,
+});
 
 const rootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -86,6 +116,11 @@ const rootRouteChildren = {
   ProposalsNewRoute: ProposalsNewRoute,
   ProposalsTemplatesRoute: ProposalsTemplatesRoute,
   ProposalsIndexRoute: ProposalsIndexRoute,
+  EmployeeDashboardRoute: EmployeeDashboardRoute,
+  EmployeeLeadsRoute: EmployeeLeadsRoute,
+  EmployeeDealsRoute: EmployeeDealsRoute,
+  EmployeeCompaniesRoute: EmployeeCompaniesRoute,
+  EmployeeProposalsRoute: EmployeeProposalsRoute,
 };
 
 export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren);

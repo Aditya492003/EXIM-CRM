@@ -6,6 +6,7 @@ import {
   createLead,
   updateLead,
   updateLeadStatus,
+  updateLeadNotes,
   toggleFavorite,
   deleteLead,
   exportLeadsCSV,
@@ -23,6 +24,7 @@ router.route("/:id").get(getLead).put(updateLead).delete(deleteLead);
 
 // Inline patch routes
 router.patch("/:id/status", updateLeadStatus);
+router.patch("/:id/notes", updateLeadNotes);
 router.patch("/:id/favorite", toggleFavorite);
 
 export default router;

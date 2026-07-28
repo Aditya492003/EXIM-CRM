@@ -1,10 +1,32 @@
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth, useUser } from "@clerk/clerk-react";
+import { useEffect, useRef } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { LandingPage } from "@/routes/landing";
+import { EmployeeLayout } from "./EmployeeLayout";
 
 export function AppLayout({ children }) {
-  const { isSignedIn, isLoaded } = useAuth();
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const { user } = useUser();
+  const syncedRef = useRef(false);
+
+  useEffect(() => {
+    async function sync() {
+      if (isSignedIn && user?.publicMetadata?.role === "employee" && !syncedRef.current) {
+        try {
+          const token = await getToken();
+          await fetch("http://localhost:5000/api/employees/sync", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          syncedRef.current = true;
+        } catch (e) {
+          console.error("Failed to sync employee record:", e);
+        }
+      }
+    }
+    sync();
+  }, [isSignedIn, user, getToken]);
 
   if (!isLoaded) {
     return (
@@ -19,6 +41,13 @@ export function AppLayout({ children }) {
 
   if (!isSignedIn) {
     return <LandingPage />;
+  }
+
+  // Check if user is an employee
+  const isEmployee = user?.publicMetadata?.role === "employee";
+
+  if (isEmployee) {
+    return <EmployeeLayout>{children}</EmployeeLayout>;
   }
 
   return (

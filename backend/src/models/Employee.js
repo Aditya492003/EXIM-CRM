@@ -36,8 +36,18 @@ const EmployeeSchema = new Schema({
     type: Date,
     default: Date.now,
   },
-  createdByClerkId: {
+  clerkUserId: {
     type: String,
+    sparse: true,
+    unique: true,
+  },
+  workingStatus: {
+    type: String,
+    enum: ['Available', 'Working on Leads', 'On Leave'],
+    default: 'Available',
+  },
+  lastLogin: {
+    type: Date,
   },
 });
 

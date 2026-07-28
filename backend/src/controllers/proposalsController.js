@@ -8,12 +8,28 @@ const generateProposalNumber = async (clerkId) => {
   return `PRO-${year}-${padded}`;
 };
 
+// Helper: build user-scoped filter
+const userFilter = (req, extra = {}) => {
+  const filter = { ...extra };
+  if (req.user?.role === "employee") {
+    const empMatch = [];
+    if (req.user.name) {
+      empMatch.push({ assignedTo: req.user.name });
+      empMatch.push({ assignedTo: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
+    }
+    filter.$or = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+  } else {
+    filter.createdByClerkId = req.user?.clerkId;
+  }
+  return filter;
+};
+
 // @desc  Get all proposals (User-scoped — only current user's proposals)
 // @route GET /api/proposals
 export const getProposals = async (req, res, next) => {
   try {
     const { status, client, search, page = 1, limit = 50 } = req.query;
-    const filter = { createdByClerkId: req.user?.clerkId };
+    const filter = userFilter(req);
 
     if (status) filter.status = status;
     if (client) filter.client = { $regex: client, $options: "i" };
@@ -42,8 +58,9 @@ export const getProposals = async (req, res, next) => {
 // @route GET /api/proposals/:id
 export const getProposal = async (req, res, next) => {
   try {
-    const proposal = await Proposal.findOne({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
-    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
+    const query = userFilter(req, { _id: req.params.id });
+    const proposal = await Proposal.findOne(query);
+    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found or access denied" });
 
     res.status(200).json({ success: true, data: proposal });
   } catch (error) {
@@ -77,12 +94,13 @@ export const updateProposal = async (req, res, next) => {
     const updateData = { ...req.body };
     if (req.file?.path) updateData.attachmentUrl = req.file.path;
 
+    const query = userFilter(req, { _id: req.params.id });
     const proposal = await Proposal.findOneAndUpdate(
-      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+      query,
       updateData,
       { new: true, runValidators: true }
     );
-    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
+    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found or access denied" });
 
     res.status(200).json({ success: true, data: proposal });
   } catch (error) {
@@ -101,12 +119,13 @@ export const updateProposalStatus = async (req, res, next) => {
     if (status === "Sent" || status === "Under Review") updateData.sentDate = new Date();
     if (status === "Approved") updateData.approvedDate = new Date();
 
+    const query = userFilter(req, { _id: req.params.id });
     const proposal = await Proposal.findOneAndUpdate(
-      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+      query,
       updateData,
       { new: true, runValidators: true }
     );
-    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
+    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found or access denied" });
 
     res.status(200).json({ success: true, data: proposal });
   } catch (error) {
@@ -118,8 +137,9 @@ export const updateProposalStatus = async (req, res, next) => {
 // @route DELETE /api/proposals/:id
 export const deleteProposal = async (req, res, next) => {
   try {
-    const proposal = await Proposal.findOneAndDelete({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
-    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found" });
+    const query = userFilter(req, { _id: req.params.id });
+    const proposal = await Proposal.findOneAndDelete(query);
+    if (!proposal) return res.status(404).json({ success: false, message: "Proposal not found or access denied" });
 
     res.status(200).json({ success: true, message: "Proposal deleted" });
   } catch (error) {

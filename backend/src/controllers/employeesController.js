@@ -1,81 +1,22 @@
 import Employee from "../models/Employee.js";
-
-const DEFAULT_EMPLOYEES = [
-  {
-    name: "Nikhil Rao",
-    email: "nikhil.rao@eximadvisory.com",
-    phone: "+91 98765 43210",
-    role: "Senior Trade Advisor",
-    department: "DGFT Advisory",
-    status: "Active",
-  },
-  {
-    name: "Simran Kaur",
-    email: "simran.kaur@eximadvisory.com",
-    phone: "+91 98765 43211",
-    role: "Sales Manager",
-    department: "Sales",
-    status: "Active",
-  },
-  {
-    name: "Kabir Malhotra",
-    email: "kabir.m@eximadvisory.com",
-    phone: "+91 98765 43212",
-    role: "Customs Compliance Specialist",
-    department: "Customs",
-    status: "Active",
-  },
-  {
-    name: "Anjali Desai",
-    email: "anjali.desai@eximadvisory.com",
-    phone: "+91 98765 43213",
-    role: "Key Account Executive",
-    department: "Sales",
-    status: "Active",
-  },
-  {
-    name: "Rahul Verma",
-    email: "rahul.verma@eximadvisory.com",
-    phone: "+91 98765 43214",
-    role: "Logistics Consultant",
-    department: "Logistics",
-    status: "Active",
-  },
-];
+import { clerkClient } from "@clerk/clerk-sdk-node";
 
 // @desc  Get all employees
 // @route GET /api/employees
 export const getEmployees = async (req, res, next) => {
   try {
-    const { search, status, department } = req.query;
+    const { search, status, department, role } = req.query;
     const filter = {};
 
-    // Auto seed default employees if collection is empty
-    const count = await Employee.countDocuments();
-    if (count === 0) {
-      await Employee.insertMany(
-        DEFAULT_EMPLOYEES.map((emp) => ({
-          ...emp,
-          createdByClerkId: req.user?.clerkId || "system",
-        }))
-      );
-    }
-
-    if (status && status !== "All") {
-      filter.status = status;
-    }
-
-    if (department && department !== "All") {
-      filter.department = department;
-    }
+    if (status && status !== "All") filter.status = status;
+    if (department && department !== "All") filter.department = department;
+    if (role && role !== "All") filter.role = role;
 
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
         { role: { $regex: search, $options: "i" } },
-        { department: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -106,34 +47,142 @@ export const getEmployee = async (req, res, next) => {
   }
 };
 
-// @desc  Create employee
-// @route POST /api/employees
-export const createEmployee = async (req, res, next) => {
+// @desc  Invite a new employee (Creates DB Record + Clerk Invitation)
+// @route POST /api/employees/invite
+export const inviteEmployee = async (req, res, next) => {
   try {
-    const { name, email, phone, role, department, status, joinedDate } = req.body;
+    const { name, email, phone, role, department, designation } = req.body;
 
     if (!name || !email) {
       return res.status(400).json({ success: false, message: "Name and email are required" });
     }
 
+    // 1. Create DB Record first (without clerkUserId initially)
     const employee = await Employee.create({
       name,
-      email,
+      email: email.toLowerCase(),
       phone,
-      role: role || "Trade Consultant",
+      role: role || designation || "Trade Consultant",
       department: department || "Sales",
-      status: status || "Active",
-      joinedDate: joinedDate || Date.now(),
-      createdByClerkId: req.user?.clerkId,
+      status: "Active",
+      workingStatus: "Available",
+      joinedDate: Date.now(),
+      createdByClerkId: req.auth?.userId || "system",
     });
 
-    res.status(201).json({ success: true, data: employee });
+    // 2. Create Clerk Invitation
+    const invitation = await clerkClient.invitations.createInvitation({
+      emailAddress: email.toLowerCase(),
+      publicMetadata: {
+        employeeId: employee._id.toString(),
+        role: "employee",
+      },
+      redirectUrl: process.env.CLIENT_URL || "http://localhost:5173",
+    });
+
+    res.status(201).json({ 
+      success: true, 
+      message: "Employee invited successfully",
+      data: employee,
+      invitationId: invitation.id 
+    });
+  } catch (error) {
+    console.error("Invite error:", error);
+    next(error);
+  }
+};
+
+// @desc  Sync Employee Clerk ID on first login
+// @route POST /api/employees/sync
+export const syncEmployee = async (req, res, next) => {
+  try {
+    const { userId } = req.auth; 
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const user = await clerkClient.users.getUser(userId);
+    const employeeId = user.publicMetadata?.employeeId;
+
+    if (!employeeId) {
+      return res.status(400).json({ success: false, message: "No employeeId linked to this Clerk account." });
+    }
+
+    const employee = await Employee.findByIdAndUpdate(
+      employeeId,
+      { clerkUserId: userId, lastLogin: Date.now() },
+      { new: true }
+    );
+
+    res.status(200).json({ success: true, data: employee });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc  Update employee
+// @desc  Get current employee profile
+// @route GET /api/employees/me
+export const getEmployeeProfile = async (req, res, next) => {
+  try {
+    const userId = req.user?.clerkId;
+    let employee = await Employee.findOne({ clerkUserId: userId });
+    if (!employee && req.user?.name) {
+      employee = await Employee.findOne({ name: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
+    }
+    if (!employee) {
+      return res.status(404).json({ success: false, message: "Employee profile not found" });
+    }
+    res.status(200).json({ success: true, data: employee });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Update employee working status
+// @route PATCH /api/employees/status
+export const updateWorkingStatus = async (req, res, next) => {
+  try {
+    const userId = req.user?.clerkId;
+    const { workingStatus, status } = req.body;
+
+    if (!userId && !req.user?.name) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const updateData = {};
+    if (workingStatus) {
+      updateData.workingStatus = workingStatus;
+      if (workingStatus === "On Leave") {
+        updateData.status = "On Leave";
+      } else {
+        updateData.status = "Active";
+      }
+    }
+    if (status) {
+      updateData.status = status;
+    }
+
+    let employee = await Employee.findOneAndUpdate(
+      { clerkUserId: userId },
+      updateData,
+      { new: true }
+    );
+
+    if (!employee && req.user?.name) {
+      employee = await Employee.findOneAndUpdate(
+        { name: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
+        updateData,
+        { new: true }
+      );
+    }
+
+    if (!employee) {
+      return res.status(404).json({ success: false, message: "Employee record not found for this user." });
+    }
+
+    res.status(200).json({ success: true, data: employee });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Update employee details
 // @route PUT /api/employees/:id
 export const updateEmployee = async (req, res, next) => {
   try {

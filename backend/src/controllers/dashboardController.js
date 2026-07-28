@@ -4,11 +4,28 @@ import Company from "../models/Company.js";
 import Proposal from "../models/Proposal.js";
 import Meeting from "../models/Meeting.js";
 
+const getBaseFilter = (req, extra = {}) => {
+  const filter = { ...extra };
+  if (req.user?.role === "employee") {
+    filter.assignedTo = req.user.name;
+  } else {
+    filter.createdByClerkId = req.user?.clerkId;
+  }
+  return filter;
+};
+
+const getCompanyFilter = (req, extra = {}) => {
+  const filter = { ...extra };
+  if (req.user?.role === "employee") {
+    filter.assignedManager = req.user.name;
+  }
+  return filter;
+};
+
 // @desc  Get KPI stats for dashboard cards (user-scoped where private)
 // @route GET /api/dashboard/stats
 export const getStats = async (req, res, next) => {
   try {
-    const clerkId = req.user?.clerkId;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -17,22 +34,22 @@ export const getStats = async (req, res, next) => {
     const [
       totalLeads,
       newLeadsToday,
-      activeCompanies,      // shared — no user filter
+      activeCompanies,
       openDeals,
       totalProposals,
       pipelineResult,
       scheduledMeetings,
     ] = await Promise.all([
-      Lead.countDocuments({ createdByClerkId: clerkId }),
-      Lead.countDocuments({ createdByClerkId: clerkId, createdDate: { $gte: today, $lt: tomorrow } }),
-      Company.countDocuments({ status: "Active" }),  // shared
-      Deal.countDocuments({ createdByClerkId: clerkId, stage: { $nin: ["Won", "Lost"] } }),
-      Proposal.countDocuments({ createdByClerkId: clerkId }),
+      Lead.countDocuments(getBaseFilter(req)),
+      Lead.countDocuments(getBaseFilter(req, { createdDate: { $gte: today, $lt: tomorrow } })),
+      Company.countDocuments(getCompanyFilter(req, { status: "Active" })),
+      Deal.countDocuments(getBaseFilter(req, { stage: { $nin: ["Won", "Lost"] } })),
+      Proposal.countDocuments(getBaseFilter(req)),
       Deal.aggregate([
-        { $match: { createdByClerkId: clerkId, stage: { $nin: ["Won", "Lost"] } } },
+        { $match: getBaseFilter(req, { stage: { $nin: ["Won", "Lost"] } }) },
         { $group: { _id: null, total: { $sum: "$value" } } },
       ]),
-      Meeting.countDocuments({ organizedByClerkId: clerkId, status: "Scheduled" }),
+      Meeting.countDocuments(getBaseFilter(req, { status: "Scheduled" })), // assuming meeting has assignedTo if employee, otherwise fallback
     ]);
 
     const pipelineValue = pipelineResult[0]?.total || 0;
@@ -58,14 +75,13 @@ export const getStats = async (req, res, next) => {
 // @route GET /api/dashboard/lead-growth
 export const getLeadGrowth = async (req, res, next) => {
   try {
-    const clerkId = req.user?.clerkId;
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
     const data = await Lead.aggregate([
-      { $match: { createdByClerkId: clerkId, createdDate: { $gte: twelveMonthsAgo } } },
+      { $match: getBaseFilter(req, { createdDate: { $gte: twelveMonthsAgo } }) },
       {
         $group: {
           _id: { year: { $year: "$createdDate" }, month: { $month: "$createdDate" } },
@@ -91,14 +107,13 @@ export const getLeadGrowth = async (req, res, next) => {
 // @route GET /api/dashboard/revenue
 export const getRevenue = async (req, res, next) => {
   try {
-    const clerkId = req.user?.clerkId;
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
     const data = await Deal.aggregate([
-      { $match: { createdByClerkId: clerkId, stage: "Won", closedDate: { $gte: twelveMonthsAgo } } },
+      { $match: getBaseFilter(req, { stage: "Won", closedDate: { $gte: twelveMonthsAgo } }) },
       {
         $group: {
           _id: { year: { $year: "$closedDate" }, month: { $month: "$closedDate" } },
@@ -124,9 +139,8 @@ export const getRevenue = async (req, res, next) => {
 // @route GET /api/dashboard/deals-by-stage
 export const getDealsByStage = async (req, res, next) => {
   try {
-    const clerkId = req.user?.clerkId;
     const data = await Deal.aggregate([
-      { $match: { createdByClerkId: clerkId } },
+      { $match: getBaseFilter(req) },
       { $group: { _id: "$stage", count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
@@ -143,9 +157,8 @@ export const getDealsByStage = async (req, res, next) => {
 // @route GET /api/dashboard/lead-sources
 export const getLeadSources = async (req, res, next) => {
   try {
-    const clerkId = req.user?.clerkId;
     const data = await Lead.aggregate([
-      { $match: { createdByClerkId: clerkId } },
+      { $match: getBaseFilter(req) },
       { $group: { _id: "$source", value: { $sum: 1 } } },
       { $sort: { value: -1 } },
     ]);
@@ -162,9 +175,8 @@ export const getLeadSources = async (req, res, next) => {
 // @route GET /api/dashboard/performance
 export const getTeamPerformance = async (req, res, next) => {
   try {
-    const clerkId = req.user?.clerkId;
     const data = await Deal.aggregate([
-      { $match: { createdByClerkId: clerkId, stage: "Won" } },
+      { $match: getBaseFilter(req, { stage: "Won" }) },
       {
         $group: {
           _id: "$assignedTo",
