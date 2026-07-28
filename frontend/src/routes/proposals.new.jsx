@@ -12,7 +12,7 @@ import {
   LayoutTemplate,
   Save,
   Search,
-  Shield,
+  SendHorizontal,
   Sparkles,
   ZoomIn,
   ZoomOut,
@@ -45,9 +45,8 @@ const STEPS = [
   { id: "service",  label: "2. Select Service",  icon: FileText },
   { id: "template", label: "3. Choose Template", icon: LayoutTemplate },
   { id: "editor",   label: "4. Live Editor",     icon: Edit3 },
-  { id: "save",     label: "5. Save",            icon: Save },
-  { id: "approve",  label: "6. Approve",         icon: Shield },
-  { id: "export",   label: "7. Export",          icon: Download },
+  { id: "save",     label: "5. Save & Send",     icon: Save },
+  { id: "export",   label: "6. Export",          icon: Download },
 ];
 
 /* ───────────────────────── Standard Placeholders ───────────────────────── */
@@ -66,9 +65,6 @@ function NewProposalPage() {
   const api = useApi();
   const [stepIdx, setStepIdx] = useState(0);
   const [saved, setSaved] = useState(false);
-  const [approved, setApproved] = useState(false);
-  const [approver, setApprover] = useState("Nikhil Rao (Sales Lead)");
-  const [approverNote, setApproverNote] = useState("");
   const [employees, setEmployees] = useState([]);
   const [assignedTo, setAssignedTo] = useState("");
   const [savingProposal, setSavingProposal] = useState(false);
@@ -77,7 +73,7 @@ function NewProposalPage() {
     api.get("/employees").then(res => setEmployees(res.data?.data || [])).catch(() => {});
   }, [api]);
 
-  const handleSaveProposal = async (statusOverride = "Draft") => {
+  const handleSaveAndSendProposal = async () => {
     try {
       setSavingProposal(true);
       const numericValue = parseFloat(String(formData.service_fee || "").replace(/[^0-9.]/g, "")) || 0;
@@ -86,17 +82,41 @@ function NewProposalPage() {
         client: formData.client_name || clientObj?.name || "Client",
         service: serviceObj?.title || serviceObj?.name || "Services",
         value: numericValue,
-        status: statusOverride,
+        status: "Sent",
         validTill: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         assignedTo: assignedTo || null,
       };
       const res = await api.post("/proposals", payload);
       if (res.data?.success) {
-        toast.success(`Proposal saved successfully as "${statusOverride}"!`);
+        toast.success("Proposal saved & marked as Sent — proceeding to Export!");
         setSaved(true);
-        if (statusOverride === "Approved" || statusOverride === "Under Review") {
-          setApproved(true);
-        }
+        // Auto-advance to Export step
+        setStepIdx(5);
+      }
+    } catch (err) {
+      toast.error("Failed to save proposal to database");
+    } finally {
+      setSavingProposal(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setSavingProposal(true);
+      const numericValue = parseFloat(String(formData.service_fee || "").replace(/[^0-9.]/g, "")) || 0;
+      const payload = {
+        title: `${formData.client_name || "Client"} - Proposal`,
+        client: formData.client_name || clientObj?.name || "Client",
+        service: serviceObj?.title || serviceObj?.name || "Services",
+        value: numericValue,
+        status: "Draft",
+        validTill: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        assignedTo: assignedTo || null,
+      };
+      const res = await api.post("/proposals", payload);
+      if (res.data?.success) {
+        toast.success("Proposal saved as Draft!");
+        setSaved(true);
       }
     } catch (err) {
       toast.error("Failed to save proposal to database");
@@ -274,8 +294,7 @@ function NewProposalPage() {
     (stepIdx === 2 && selectedTemplate) ||
     stepIdx === 3 ||
     (stepIdx === 4 && saved) ||
-    (stepIdx === 5 && approved) ||
-    stepIdx === 6;
+    stepIdx === 5;
 
   const handleAddCustomField = () => {
     if (!newFieldKey.trim()) return;
@@ -631,18 +650,18 @@ function NewProposalPage() {
     </div>
   );
 
-  /* Step 5: Save */
+  /* Step 5: Save & Send */
   const SaveStep = (
     <div className="space-y-5">
-      <StepHeader step={5} title="Save Proposal" sub="Review final placeholder data and save proposal to pipeline." />
+      <StepHeader step={5} title="Save & Send Proposal" sub="Review final details, optionally assign to an employee, then save and send directly — no approval needed." />
       <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-        <label className="block text-xs font-semibold">Assign Proposal to Employee</label>
+        <label className="block text-xs font-semibold">Assign Proposal to Employee (Optional)</label>
         <select
           value={assignedTo}
           onChange={(e) => setAssignedTo(e.target.value)}
           className={inputCls}
         >
-          <option value="">— Unassigned (Manager Only) —</option>
+          <option value="">— Unassigned (Self) —</option>
           {employees.map((e) => (
             <option key={e._id} value={e.name}>{e.name} ({e.role || e.department || "Employee"})</option>
           ))}
@@ -657,68 +676,44 @@ function NewProposalPage() {
           </div>
         ))}
       </div>
+
       {!saved ? (
-        <button
-          onClick={() => handleSaveProposal("Draft")}
-          disabled={savingProposal}
-          className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/25 transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-60"
-        >
-          <Save size={15} /> {savingProposal ? "Saving to Database…" : "Save Proposal Draft"}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleSaveAndSendProposal}
+            disabled={savingProposal}
+            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-60"
+          >
+            <SendHorizontal size={15} /> {savingProposal ? "Saving & Sending…" : "Save & Send Proposal"}
+          </button>
+          <button
+            onClick={handleSaveDraft}
+            disabled={savingProposal}
+            className="inline-flex items-center gap-2 rounded-2xl border border-border bg-card px-5 py-3 text-sm font-semibold shadow-sm hover:bg-muted disabled:opacity-60"
+          >
+            <Save size={15} /> Save as Draft
+          </button>
+        </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-          <CheckCircle2 size={16} /> Proposal saved to MongoDB successfully!
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <CheckCircle2 size={16} /> Proposal saved & sent successfully! Proceeding to export…
+          </div>
+          <button
+            onClick={() => setStepIdx(5)}
+            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 px-5 py-2.5 text-xs font-bold text-white shadow-md"
+          >
+            Continue to Export <ArrowRight size={13} />
+          </button>
         </div>
       )}
     </div>
   );
 
-  /* Step 6: Approve */
-  const ApproveStep = (
-    <div className="space-y-5">
-      <StepHeader step={6} title="Proposal Approval" sub="Route generated proposal to senior manager for sign-off." />
-      <div className="rounded-xl border border-border bg-muted/30 p-5 space-y-4">
-        <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
-          <CheckCircle2 size={15} /> Ready for management review
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Approver">
-            <select value={approver} onChange={(e) => setApprover(e.target.value)} className={inputCls}>
-              <option>Nikhil Rao (Sales Lead)</option>
-              <option>Simran Kaur (Partner)</option>
-              <option>Kabir Malhotra (Director)</option>
-            </select>
-          </Field>
-          <Field label="Note to Approver">
-            <input
-              value={approverNote}
-              onChange={(e) => setApproverNote(e.target.value)}
-              className={inputCls}
-              placeholder="Optional comment…"
-            />
-          </Field>
-        </div>
-        {!approved ? (
-          <button
-            onClick={() => handleSaveProposal("Under Review")}
-            disabled={savingProposal}
-            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-60"
-          >
-            <Shield size={15} /> {savingProposal ? "Submitting…" : "Submit for Approval"}
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
-            <CheckCircle2 size={16} /> Approved & Saved to Database!
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  /* Step 7: Export */
+  /* Step 6: Export */
   const ExportStep = (
     <div className="space-y-5">
-      <StepHeader step={7} title="Export & Dispatch" sub="Download pixel-perfect DOCX file generated via docxtemplater." />
+      <StepHeader step={6} title="Export & Dispatch" sub="Download pixel-perfect DOCX file generated via docxtemplater." />
       <div className="grid gap-4 sm:grid-cols-3">
         <button
           onClick={handleExportDocx}
@@ -748,7 +743,7 @@ function NewProposalPage() {
     </div>
   );
 
-  const stepContent = [ClientStep, ServiceStep, TemplateStep, EditorStep, SaveStep, ApproveStep, ExportStep];
+  const stepContent = [ClientStep, ServiceStep, TemplateStep, EditorStep, SaveStep, ExportStep];
 
   return (
     <AppLayout>
@@ -771,14 +766,14 @@ function NewProposalPage() {
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Create Proposal</h1>
             <p className="mt-1 text-xs text-muted-foreground">
               Proposal Ref: <span className="font-medium text-foreground">{formData.proposal_no}</span>
-              {saved && <span className="ml-2 text-emerald-600 font-semibold">· Saved</span>}
-              {approved && <span className="ml-2 text-indigo-600 font-semibold">· Approved</span>}
+              {saved && <span className="ml-2 text-emerald-600 font-semibold">· Saved & Sent</span>}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setSaved(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium shadow-sm hover:bg-muted"
+              onClick={handleSaveDraft}
+              disabled={savingProposal}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium shadow-sm hover:bg-muted disabled:opacity-50"
             >
               <Save size={14} /> Save Draft
             </button>

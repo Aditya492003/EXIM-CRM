@@ -9,6 +9,9 @@ import {
   Sparkles,
   Users,
   Video,
+  Plus,
+  LayoutTemplate,
+  Boxes,
 } from "lucide-react";
 
 const navSections = [
@@ -20,10 +23,19 @@ const navSections = [
       { to: "/employee/leads", label: "My Leads", icon: Users },
       { to: "/employee/deals", label: "My Deals", icon: Handshake },
       { to: "/employee/meetings", label: "My Meetings", icon: Video },
-      { to: "/employee/proposals", label: "Proposal Approval", icon: FileText },
+    ],
+  },
+  {
+    title: "Proposals",
+    items: [
+      { to: "/employee/proposals", label: "My Proposals", icon: FileText },
+      { to: "/proposals/new", label: "Create Proposal", icon: Plus },
+      { to: "/proposals/templates", label: "Templates", icon: LayoutTemplate },
+      { to: "/services", label: "Services", icon: Boxes },
     ],
   },
 ];
+
 
 export function EmployeeSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });

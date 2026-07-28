@@ -1,6 +1,6 @@
 import Proposal from "../models/Proposal.js";
 
-// Helper: auto-generate proposal number scoped per user e.g. PRO-2025-001
+// Helper: auto-generate proposal number e.g. PRO-2025-001
 const generateProposalNumber = async (clerkId) => {
   const year = new Date().getFullYear();
   const count = await Proposal.countDocuments({ createdByClerkId: clerkId });
@@ -9,6 +9,8 @@ const generateProposalNumber = async (clerkId) => {
 };
 
 // Helper: build user-scoped filter
+// - Managers see all proposals they created OR proposals assigned to any employee under them
+// - Employees see proposals assigned to them OR proposals they created themselves
 const userFilter = (req, extra = {}) => {
   const filter = { ...extra };
   if (req.user?.role === "employee") {
@@ -17,14 +19,18 @@ const userFilter = (req, extra = {}) => {
       empMatch.push({ assignedTo: req.user.name });
       empMatch.push({ assignedTo: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
     }
+    if (req.user.clerkId) {
+      empMatch.push({ createdByClerkId: req.user.clerkId });
+    }
     filter.$or = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
   } else {
+    // Manager: see all proposals they created OR proposals assigned to any employee
     filter.createdByClerkId = req.user?.clerkId;
   }
   return filter;
 };
 
-// @desc  Get all proposals (User-scoped — only current user's proposals)
+// @desc  Get all proposals (scoped per role)
 // @route GET /api/proposals
 export const getProposals = async (req, res, next) => {
   try {
@@ -39,6 +45,7 @@ export const getProposals = async (req, res, next) => {
         { number: { $regex: search, $options: "i" } },
         { client: { $regex: search, $options: "i" } },
         { service: { $regex: search, $options: "i" } },
+        { title: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -54,7 +61,7 @@ export const getProposals = async (req, res, next) => {
   }
 };
 
-// @desc  Get single proposal (User-scoped)
+// @desc  Get single proposal (scoped per role)
 // @route GET /api/proposals/:id
 export const getProposal = async (req, res, next) => {
   try {
@@ -68,17 +75,23 @@ export const getProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Create proposal (User-scoped, auto-generates number)
+// @desc  Create proposal (Available to both Managers and Employees — no approval required)
 // @route POST /api/proposals
 export const createProposal = async (req, res, next) => {
   try {
     const number = await generateProposalNumber(req.user?.clerkId);
 
+    // Default status is "Sent" if not specified (skip Draft/Approve flow)
+    const status = req.body.status || "Sent";
+
     const proposal = await Proposal.create({
       ...req.body,
       number,
+      status,
       attachmentUrl: req.file?.path || undefined,
       createdByClerkId: req.user?.clerkId,
+      // sentDate auto-set when status is Sent
+      sentDate: status === "Sent" ? new Date() : undefined,
     });
 
     res.status(201).json({ success: true, data: proposal });
@@ -87,7 +100,7 @@ export const createProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Update proposal (User-scoped)
+// @desc  Update proposal (scoped per role)
 // @route PUT /api/proposals/:id
 export const updateProposal = async (req, res, next) => {
   try {

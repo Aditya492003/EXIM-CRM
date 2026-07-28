@@ -1,11 +1,14 @@
 import Service from "../models/Services.js";
 
-// @desc  Get all services (User-scoped — only current user's services)
+// Helper: build shared filter (all managers and employees share Services)
+const sharedFilter = (extra = {}) => ({ ...extra });
+
+// @desc  Get all services (Shared across all users — Managers & Employees)
 // @route GET /api/services
 export const getServices = async (req, res, next) => {
   try {
     const { category, status, search } = req.query;
-    const filter = { createdByClerkId: req.user?.clerkId };
+    const filter = sharedFilter();
 
     if (category) filter.category = category;
     if (status) filter.status = status;
@@ -19,11 +22,11 @@ export const getServices = async (req, res, next) => {
   }
 };
 
-// @desc  Get single service (User-scoped)
+// @desc  Get single service (Shared)
 // @route GET /api/services/:id
 export const getService = async (req, res, next) => {
   try {
-    const service = await Service.findOne({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
+    const service = await Service.findById(req.params.id);
     if (!service) return res.status(404).json({ success: false, message: "Service not found" });
 
     res.status(200).json({ success: true, data: service });
@@ -32,7 +35,7 @@ export const getService = async (req, res, next) => {
   }
 };
 
-// @desc  Create service (stamped with clerkId)
+// @desc  Create service (stamped with clerkId for audit, but accessible to all)
 // @route POST /api/services
 export const createService = async (req, res, next) => {
   try {
@@ -47,12 +50,12 @@ export const createService = async (req, res, next) => {
   }
 };
 
-// @desc  Update service (User-scoped)
+// @desc  Update service (Any authenticated user can update shared services)
 // @route PUT /api/services/:id
 export const updateService = async (req, res, next) => {
   try {
-    const service = await Service.findOneAndUpdate(
-      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+    const service = await Service.findByIdAndUpdate(
+      req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
@@ -64,11 +67,11 @@ export const updateService = async (req, res, next) => {
   }
 };
 
-// @desc  Delete service (User-scoped)
+// @desc  Delete service (Any authenticated user can delete shared services)
 // @route DELETE /api/services/:id
 export const deleteService = async (req, res, next) => {
   try {
-    const service = await Service.findOneAndDelete({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
+    const service = await Service.findByIdAndDelete(req.params.id);
     if (!service) return res.status(404).json({ success: false, message: "Service not found" });
 
     res.status(200).json({ success: true, message: "Service deleted" });

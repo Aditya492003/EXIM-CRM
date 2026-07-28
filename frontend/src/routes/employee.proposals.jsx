@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
-  Search, ChevronDown, X, FileText, Loader2, RefreshCw, Building2
+  Search, ChevronDown, X, FileText, Loader2, RefreshCw, Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
@@ -64,9 +64,15 @@ function EmployeeProposalsPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">My Proposals</h1>
-            <p className="text-sm text-muted-foreground">{proposals.length} proposals assigned to you</p>
+            <p className="text-sm text-muted-foreground">{proposals.length} proposals in your pipeline</p>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              to="/proposals/new"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:shadow-lg transition cursor-pointer"
+            >
+              <Plus size={14} /> Create Proposal
+            </Link>
             <button onClick={fetchProposals} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition flex items-center gap-1.5">
               <RefreshCw size={13} /> Refresh
             </button>
@@ -103,8 +109,13 @@ function EmployeeProposalsPage() {
                   <tr>
                     <td colSpan="6" className="p-12 text-center">
                       <FileText className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                      <p className="mt-2 text-sm text-muted-foreground">No proposals assigned to you yet.</p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">Your manager will assign proposals to you from the Manager Portal.</p>
+                      <p className="mt-2 text-sm text-muted-foreground">No proposals yet.</p>
+                      <Link
+                        to="/proposals/new"
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+                      >
+                        <Plus size={13} /> Create your first proposal
+                      </Link>
                     </td>
                   </tr>
                 ) : (
@@ -144,11 +155,6 @@ function EmployeeProposalsPage() {
               </tbody>
             </table>
           </div>
-          {proposals.length > 0 && (
-            <div className="p-4 border-t border-border bg-amber-50/60 text-xs text-amber-700 font-medium rounded-b-2xl">
-              ⚠️ Only you can update proposal status. Final approval (Approved / Rejected) is managed by your manager.
-            </div>
-          )}
         </div>
       </div>
     </AppLayout>
