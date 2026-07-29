@@ -72,6 +72,8 @@ function NewProposalPage() {
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [dbServices, setDbServices] = useState([]);
   const [loadingServices, setLoadingServices] = useState(true);
+  const [dbTemplates, setDbTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
 
   useEffect(() => {
     api.get("/employees").then(res => setEmployees(res.data?.data || [])).catch(() => {});
@@ -83,6 +85,10 @@ function NewProposalPage() {
       .then(res => setDbServices(res.data?.data || []))
       .catch((err) => console.error("Failed to load services for proposal", err))
       .finally(() => setLoadingServices(false));
+    api.get("/templates")
+      .then(res => setDbTemplates(res.data?.data || []))
+      .catch((err) => console.error("Failed to load templates for proposal", err))
+      .finally(() => setLoadingTemplates(false));
   }, [api]);
 
   const handleSaveAndSendProposal = async () => {
@@ -486,83 +492,129 @@ function NewProposalPage() {
   );
 
   /* Step 3: Choose Template */
+  const defaultBuiltInTemplate = {
+    id: "aeo-template",
+    _id: null,
+    name: "Engagement Letter — AEO T1 & T2",
+    description: "Standard ASC Group proposal template with placeholders",
+    category: "General",
+    fileUrl: "/proposal_template.docx",
+    format: "DOCX",
+    status: "Published",
+    usedCount: 42,
+    isBuiltIn: true,
+  };
+
+  const allTemplates = [defaultBuiltInTemplate, ...dbTemplates];
+
+  const [templateSearch, setTemplateSearch] = useState("");
+  const filteredTemplates = allTemplates.filter((t) =>
+    !templateSearch ||
+    t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+    (t.description || "").toLowerCase().includes(templateSearch.toLowerCase()) ||
+    (t.category || "").toLowerCase().includes(templateSearch.toLowerCase())
+  );
+
   const TemplateStep = (
     <div className="space-y-4">
-      <StepHeader step={3} title="Choose DOCX Template" sub="Select standard template or upload custom DOCX template with placeholders." />
+      <StepHeader step={3} title="Choose DOCX Template" sub="Select from your uploaded templates or use the built-in standard template." />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {/* Main Placeholder DOCX Template */}
-        <button
-          onClick={() =>
-            setSelectedTemplate({
-              id: "aeo-template",
-              name: "Engagement Letter — AEO T1 & T2",
-              fileUrl: "/proposal_template.docx",
-              category: "Customs & AEO",
-              format: "DOCX",
-            })
-          }
-          className={cn(
-            "rounded-2xl border-2 p-4 text-left transition cursor-pointer",
-            selectedTemplate.id === "aeo-template"
-              ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
-              : "border-border bg-card hover:bg-muted/60"
-          )}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-sm font-bold text-indigo-800 dark:text-indigo-300">📄 Engagement Letter Template</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">Standard ASC Group proposal template with placeholders</div>
-            </div>
-            {selectedTemplate.id === "aeo-template" && <Check size={16} className="text-indigo-600" />}
-          </div>
-          <div className="mt-3 flex items-center justify-between text-[11px]">
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">Placeholders Ready</span>
-            <span className="text-muted-foreground">DOCX Format</span>
-          </div>
-        </button>
+      {/* Search bar */}
+      <div className="relative">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={templateSearch}
+          onChange={(e) => setTemplateSearch(e.target.value)}
+          placeholder="Search templates…"
+          className="w-full rounded-xl border border-border bg-card px-9 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200/60 dark:focus:ring-indigo-500/30"
+        />
+      </div>
 
-        {/* Custom DOCX File Uploader - Strict .docx Security Enforcement */}
-        <label className="rounded-2xl border-2 border-dashed border-border bg-card p-4 text-left hover:border-indigo-400 hover:bg-muted/60 transition cursor-pointer flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <Upload size={14} className="text-indigo-600" /> Upload Custom DOCX Template
-              </div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">Only Microsoft Word (.docx) format accepted for security</div>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center justify-between text-[11px] text-indigo-600 font-semibold">
-            <span>Browse DOCX File…</span>
-            <span className="text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">.docx only</span>
-          </div>
-          <input
-            type="file"
-            accept=".docx"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                if (!file.name.toLowerCase().endsWith(".docx")) {
-                  toast.error("Security Restriction: Only .docx (Microsoft Word) template files are allowed. PDF or other formats are blocked.");
-                  return;
+      {/* Selected indicator */}
+      {selectedTemplate && (
+        <div className="flex items-center gap-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 px-3 py-2 text-xs">
+          <CheckCircle2 size={14} className="text-indigo-600 shrink-0" />
+          <span className="font-semibold text-indigo-700 dark:text-indigo-300">Selected:</span>
+          <span className="text-indigo-800 dark:text-indigo-200">{selectedTemplate.name}</span>
+        </div>
+      )}
+
+      {/* Templates grid */}
+      {loadingTemplates ? (
+        <div className="p-8 text-center text-muted-foreground text-sm">Loading templates…</div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className="p-8 text-center text-muted-foreground text-sm">
+          No templates found.{" "}
+          <a href="/proposals/templates" className="text-indigo-600 underline">Upload one →</a>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-[420px] overflow-y-auto pr-1">
+          {filteredTemplates.map((t) => {
+            const tid = t._id || t.id;
+            const isSelected = selectedTemplate?.id === tid || selectedTemplate?._id === t._id;
+            return (
+              <button
+                key={tid}
+                onClick={() =>
+                  setSelectedTemplate({
+                    id: tid,
+                    _id: t._id,
+                    name: t.name,
+                    fileUrl: t.fileUrl,
+                    category: t.category,
+                    format: t.format || "DOCX",
+                    isBuiltIn: t.isBuiltIn || false,
+                  })
                 }
-                const objectUrl = URL.createObjectURL(file);
-                setSelectedTemplate({
-                  id: `custom-${Date.now()}`,
-                  name: file.name,
-                  fileUrl: objectUrl,
-                  category: "Custom Upload",
-                  format: "DOCX",
-                });
-                toast.success(`Loaded custom DOCX template "${file.name}" — tags inspected automatically!`);
-              }
-            }}
-          />
-        </label>
+                className={cn(
+                  "rounded-2xl border-2 p-4 text-left transition cursor-pointer",
+                  isSelected
+                    ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
+                    : "border-border bg-card hover:bg-muted/60"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+                    <FileText size={14} />
+                  </div>
+                  {isSelected && <Check size={15} className="text-indigo-600 shrink-0 mt-0.5" />}
+                </div>
+                <div className="mt-2 text-sm font-bold leading-snug line-clamp-2">{t.name}</div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{t.description || "Proposal template"}</div>
+                <div className="mt-3 flex items-center justify-between gap-2 text-[10px]">
+                  <span className={cn(
+                    "rounded-full px-2 py-0.5 font-semibold",
+                    t.isBuiltIn
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                      : "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300"
+                  )}>
+                    {t.isBuiltIn ? "Built-in" : "Cloudinary"}
+                  </span>
+                  <span className="text-muted-foreground">{t.category}</span>
+                  <span className="text-muted-foreground uppercase font-mono">{t.format || "DOCX"}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Quick link to upload more */}
+      <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+        <span>Need a different template?</span>
+        <a
+          href="/proposals/templates"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-indigo-600 font-semibold hover:underline"
+        >
+          <Plus size={12} /> Upload Template
+        </a>
       </div>
     </div>
   );
+
+
 
   /* Step 4: Live Editor (Placeholder Engine) */
   const EditorStep = (

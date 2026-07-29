@@ -1,11 +1,20 @@
 import Contact from "../models/Contact.js";
 
-// @desc  Get all contacts (User-scoped — only current user's contacts)
+// Helper: build base filter based on user role
+// Managers see ALL contacts (shared pool), employees only see their own
+function buildBaseFilter(req) {
+  if (req.user?.role === "manager") {
+    return {}; // No restriction — all contacts visible to managers
+  }
+  return { createdByClerkId: req.user?.clerkId }; // Employees see only their own
+}
+
+// @desc  Get all contacts (Managers: all contacts; Employees: own contacts)
 // @route GET /api/contacts
 export const getContacts = async (req, res, next) => {
   try {
     const { company, companyId, search } = req.query;
-    const filter = { createdByClerkId: req.user?.clerkId };
+    const filter = buildBaseFilter(req);
 
     if (companyId && company) {
       filter.$or = [
@@ -41,11 +50,12 @@ export const getContacts = async (req, res, next) => {
   }
 };
 
-// @desc  Get single contact (User-scoped)
+// @desc  Get single contact (Managers: any; Employees: own only)
 // @route GET /api/contacts/:id
 export const getContact = async (req, res, next) => {
   try {
-    const contact = await Contact.findOne({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
+    const filter = { _id: req.params.id, ...buildBaseFilter(req) };
+    const contact = await Contact.findOne(filter);
     if (!contact) return res.status(404).json({ success: false, message: "Contact not found" });
 
     res.status(200).json({ success: true, data: contact });
@@ -54,7 +64,7 @@ export const getContact = async (req, res, next) => {
   }
 };
 
-// @desc  Create contact (stamped with clerkId)
+// @desc  Create contact (stamped with clerkId of creator)
 // @route POST /api/contacts
 export const createContact = async (req, res, next) => {
   try {
@@ -70,19 +80,20 @@ export const createContact = async (req, res, next) => {
   }
 };
 
-// @desc  Update contact (User-scoped)
+// @desc  Update contact (Managers: any; Employees: own only)
 // @route PUT /api/contacts/:id
 export const updateContact = async (req, res, next) => {
   try {
     const updateData = { ...req.body };
     if (req.file?.path) updateData.avatarUrl = req.file.path;
 
+    const filter = { _id: req.params.id, ...buildBaseFilter(req) };
     const contact = await Contact.findOneAndUpdate(
-      { _id: req.params.id, createdByClerkId: req.user?.clerkId },
+      filter,
       updateData,
       { new: true, runValidators: true }
     );
-    if (!contact) return res.status(404).json({ success: false, message: "Contact not found" });
+    if (!contact) return res.status(404).json({ success: false, message: "Contact not found or access denied" });
 
     res.status(200).json({ success: true, data: contact });
   } catch (error) {
@@ -90,12 +101,13 @@ export const updateContact = async (req, res, next) => {
   }
 };
 
-// @desc  Delete contact (User-scoped)
+// @desc  Delete contact (Managers: any; Employees: own only)
 // @route DELETE /api/contacts/:id
 export const deleteContact = async (req, res, next) => {
   try {
-    const contact = await Contact.findOneAndDelete({ _id: req.params.id, createdByClerkId: req.user?.clerkId });
-    if (!contact) return res.status(404).json({ success: false, message: "Contact not found" });
+    const filter = { _id: req.params.id, ...buildBaseFilter(req) };
+    const contact = await Contact.findOneAndDelete(filter);
+    if (!contact) return res.status(404).json({ success: false, message: "Contact not found or access denied" });
 
     res.status(200).json({ success: true, message: "Contact deleted" });
   } catch (error) {

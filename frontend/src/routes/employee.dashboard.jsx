@@ -4,7 +4,7 @@ import {
   Users, Handshake, FileText, Building2, ChevronDown, Loader2,
   Calendar, Clock, Video, CheckCircle2, ArrowUpRight, Filter,
   Sparkles, RefreshCw, CalendarDays, Search, Check, AlertCircle,
-  Briefcase, ArrowRight, ShieldAlert, Layers
+  Briefcase, ArrowRight, ShieldAlert, Layers, Bell, Trash2, MessageSquare, X
 } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { useApi } from "@/lib/api";
@@ -64,6 +64,10 @@ function EmployeeDashboard() {
   const [deals, setDeals] = useState([]);
   const [proposals, setProposals] = useState([]);
 
+  // Notifications State
+  const [notifications, setNotifications] = useState([]);
+  const [selectedNotif, setSelectedNotif] = useState(null);
+
   // Date Filter State: "today" | "tomorrow" | "week" | "all" | custom date string
   const [dateFilter, setDateFilter] = useState("today");
   const [customDate, setCustomDate] = useState("");
@@ -103,6 +107,11 @@ function EmployeeDashboard() {
       if (profRes?.data?.data) {
         setProfile(profRes.data.data);
       }
+
+      // Fetch active manager notifications for employee (past 24h)
+      api.get("/notifications/my")
+        .then((res) => setNotifications(res.data?.data || []))
+        .catch((err) => console.error("Failed to load notifications", err));
     } catch (err) {
       console.error("Failed to load employee dashboard data", err);
     } finally {
@@ -317,6 +326,110 @@ function EmployeeDashboard() {
           <StatCard title="Assigned Deals" value={stats.deals} icon={Handshake} color="bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" link="/employee/deals" />
         </div>
 
+        {/* Manager Notifications Banner / Stack Card (Placed directly under 4 Stats Cards) */}
+        <div className="rounded-3xl border border-indigo-200/80 bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 p-5 sm:p-6 text-white shadow-xl relative overflow-hidden">
+          <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-indigo-500/20 blur-2xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-indigo-500/20 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                <Bell size={20} />
+                {notifications.filter((n) => !n.read).length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-sm">
+                    {notifications.filter((n) => !n.read).length}
+                  </span>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-extrabold tracking-tight">Manager Notifications & Instructions</h2>
+                  <span className="rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    Auto-expires in 24 Hours
+                  </span>
+                </div>
+                <p className="text-xs text-indigo-200/70">
+                  Instruction notes sent by managers. Click any message to open details.
+                </p>
+              </div>
+            </div>
+            {notifications.length > 0 && (
+              <span className="text-xs text-indigo-300/90 font-semibold bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
+                {notifications.length} active notification{notifications.length > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {/* Notifications Stack List */}
+          <div className="mt-4 space-y-2.5 relative z-10">
+            {notifications.length === 0 ? (
+              <div className="p-6 text-center text-xs text-indigo-200/60 bg-white/5 rounded-2xl border border-white/5">
+                <MessageSquare className="mx-auto h-6 w-6 text-indigo-400/50 mb-1.5" />
+                No active notifications from managers right now. New notes will auto-appear here in your dashboard for 24 hours.
+              </div>
+            ) : (
+              notifications.map((n) => {
+                const hoursLeft = Math.max(0, Math.round((new Date(n.createdDate).getTime() + 24 * 60 * 60 * 1000 - Date.now()) / (1000 * 60 * 60)));
+                return (
+                  <div
+                    key={n._id}
+                    onClick={async () => {
+                      setSelectedNotif(n);
+                      if (!n.read) {
+                        try {
+                          await api.patch(`/notifications/${n._id}/read`);
+                          setNotifications((prev) => prev.map((item) => (item._id === n._id ? { ...item, read: true } : item)));
+                        } catch (e) {}
+                      }
+                    }}
+                    className={cn(
+                      "group flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3.5 transition cursor-pointer hover:translate-x-0.5",
+                      n.read
+                        ? "border-white/10 bg-white/5 text-indigo-100/90 hover:bg-white/10"
+                        : "border-indigo-400/50 bg-indigo-500/15 text-white shadow-md ring-1 ring-indigo-400/30 hover:bg-indigo-500/20"
+                    )}
+                  >
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className={cn("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", n.read ? "bg-slate-500" : "bg-emerald-400 animate-pulse")} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-extrabold text-indigo-300">Manager Note from {n.senderName || "Manager"}</span>
+                          <span className="text-[10px] text-indigo-200/60 flex items-center gap-1">
+                            <Clock size={10} /> {new Date(n.createdDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs font-medium text-white/95 line-clamp-2 leading-relaxed">
+                          {n.note}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-200 border border-white/10">
+                        Deletes in {hoursLeft}h
+                      </span>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.delete(`/notifications/${n._id}`);
+                            setNotifications((prev) => prev.filter((item) => item._id !== n._id));
+                            toast.success("Notification dismissed");
+                          } catch (e) {
+                            toast.error("Failed to dismiss notification");
+                          }
+                        }}
+                        className="rounded-lg p-1.5 text-indigo-300 hover:bg-white/10 hover:text-rose-400 transition cursor-pointer"
+                        title="Dismiss notification"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
         {/* ASSIGNED WORK LIST CONTAINER */}
         <div className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-sm space-y-5">
           {/* Work List Header & Filter Controls */}
@@ -501,6 +614,24 @@ function EmployeeDashboard() {
           )}
         </div>
       </div>
+
+      {/* Notification Detail Modal */}
+      {selectedNotif && (
+        <NotificationDetailModal
+          notif={selectedNotif}
+          onClose={() => setSelectedNotif(null)}
+          onDelete={async () => {
+            try {
+              await api.delete(`/notifications/${selectedNotif._id}`);
+              setNotifications((prev) => prev.filter((n) => n._id !== selectedNotif._id));
+              setSelectedNotif(null);
+              toast.success("Notification dismissed");
+            } catch (e) {
+              toast.error("Failed to dismiss notification");
+            }
+          }}
+        />
+      )}
     </AppLayout>
   );
 }
@@ -519,5 +650,74 @@ function StatCard({ title, value, icon: Icon, color, link }) {
         <div className="text-xs font-semibold text-muted-foreground mt-0.5">{title}</div>
       </div>
     </Link>
+  );
+}
+
+function NotificationDetailModal({ notif, onClose, onDelete }) {
+  const hoursLeft = Math.max(0, Math.round((new Date(notif.createdDate).getTime() + 24 * 60 * 60 * 1000 - Date.now()) / (1000 * 60 * 60)));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+              <Bell size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold">Manager Notification Note</h2>
+              <p className="text-xs text-muted-foreground">Sent by {notif.senderName || "Manager"}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-muted cursor-pointer">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Sender & Timestamp badge */}
+        <div className="flex items-center justify-between rounded-xl bg-muted/60 p-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-foreground">From: {notif.senderName || "Manager"}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
+            <Clock size={12} />
+            <span>{new Date(notif.createdDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>({new Date(notif.createdDate).toLocaleDateString("en-IN")})</span>
+          </div>
+        </div>
+
+        {/* Full Note Text Content */}
+        <div className="rounded-xl border border-indigo-200/60 bg-indigo-50/50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/40">
+          <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">
+            Instruction Note / Task Details
+          </div>
+          <p className="text-sm font-medium text-foreground whitespace-pre-wrap leading-relaxed">
+            {notif.note}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-xl border border-border">
+          <span>Auto-deletion status:</span>
+          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+            Expires in ~{hoursLeft} hours (24h TTL)
+          </span>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          <button
+            onClick={onDelete}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-400 cursor-pointer"
+          >
+            <Trash2 size={13} /> Dismiss
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 cursor-pointer shadow-md"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

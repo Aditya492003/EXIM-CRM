@@ -21,25 +21,36 @@ const requireAuth = async (req, res, next) => {
         // 1. Direct check by clerkUserId
         let employee = await Employee.findOne({ clerkUserId: payload.sub });
 
-        // 2. Fallback: If not found by clerkUserId, look up Clerk user email / metadata and link
-        if (!employee && payload.sub) {
+        let managerName = null;
+        let managerEmail = null;
+
+        // 2. Lookup Clerk user details for Manager or unlinked Employee
+        if (payload.sub) {
             try {
                 const clerkUser = await clerkClient.users.getUser(payload.sub);
                 const userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase();
-                const employeeIdFromMeta = clerkUser?.publicMetadata?.employeeId;
+                const firstName = clerkUser?.firstName || "";
+                const lastName = clerkUser?.lastName || "";
+                const fullName = `${firstName} ${lastName}`.trim() || clerkUser?.username || userEmail;
+                managerName = fullName || null;
+                managerEmail = userEmail || null;
 
-                if (employeeIdFromMeta) {
-                    employee = await Employee.findByIdAndUpdate(
-                        employeeIdFromMeta,
-                        { clerkUserId: payload.sub },
-                        { returnDocument: 'after' }
-                    );
-                } else if (userEmail) {
-                    employee = await Employee.findOneAndUpdate(
-                        { email: userEmail },
-                        { clerkUserId: payload.sub },
-                        { returnDocument: 'after' }
-                    );
+                if (!employee) {
+                    const employeeIdFromMeta = clerkUser?.publicMetadata?.employeeId;
+
+                    if (employeeIdFromMeta) {
+                        employee = await Employee.findByIdAndUpdate(
+                            employeeIdFromMeta,
+                            { clerkUserId: payload.sub },
+                            { returnDocument: 'after' }
+                        );
+                    } else if (userEmail) {
+                        employee = await Employee.findOneAndUpdate(
+                            { email: userEmail },
+                            { clerkUserId: payload.sub },
+                            { returnDocument: 'after' }
+                        );
+                    }
                 }
             } catch (err) {
                 // If Clerk SDK lookup fails, fallback silently
@@ -50,7 +61,8 @@ const requireAuth = async (req, res, next) => {
             clerkId: payload.sub,
             sessionId: payload.sid,
             role: employee ? "employee" : "manager",
-            name: employee ? employee.name : null,
+            name: employee ? employee.name : (managerName || "Manager"),
+            email: employee ? employee.email : managerEmail,
             employeeId: employee ? employee._id : null,
         };
 

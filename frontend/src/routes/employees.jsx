@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useUser } from "@clerk/clerk-react";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Plus, Search, Filter, Trash2, Pencil, Mail, Phone, UserCheck,
-  Building2, Briefcase, Calendar, ShieldCheck, Loader2, Sparkles, X, User
+  Building2, Briefcase, Calendar, ShieldCheck, Loader2, Sparkles, X, User, Bell, Send
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
@@ -37,6 +38,7 @@ export default function EmployeesPage() {
   const [openAdd, setOpenAdd] = useState(false);
   const [editing, setEditing] = useState(null);
   const [active, setActive] = useState(null);
+  const [notifying, setNotifying] = useState(null);
 
   const fetchEmployees = useCallback(async () => {
     try {
@@ -221,6 +223,13 @@ export default function EmployeesPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
                           <button
+                            onClick={() => setNotifying(emp)}
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer"
+                            title="Send Notification Note to Employee"
+                          >
+                            <Bell size={14} />
+                          </button>
+                          <button
                             onClick={() => setEditing(emp)}
                             className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer"
                             title="Edit Employee"
@@ -259,7 +268,10 @@ export default function EmployeesPage() {
       {editing && <EditEmployeeModal employee={editing} onClose={() => setEditing(null)} onSuccess={fetchEmployees} />}
 
       {/* View Employee Detail Modal */}
-      {active && <EmployeeDetailDrawer employee={active} onClose={() => setActive(null)} onEdit={() => { setEditing(active); setActive(null); }} onDelete={() => handleDelete(active)} />}
+      {active && <EmployeeDetailDrawer employee={active} onClose={() => setActive(null)} onEdit={() => { setEditing(active); setActive(null); }} onDelete={() => handleDelete(active)} onSendNote={() => { setNotifying(active); setActive(null); }} />}
+
+      {/* Send Notification Note Modal */}
+      {notifying && <SendNotificationModal employee={notifying} onClose={() => setNotifying(null)} />}
     </AppLayout>
   );
 }
@@ -544,7 +556,7 @@ function EditEmployeeModal({ employee, onClose, onSuccess }) {
   );
 }
 
-function EmployeeDetailDrawer({ employee, onClose, onEdit, onDelete }) {
+function EmployeeDetailDrawer({ employee, onClose, onEdit, onDelete, onSendNote }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-md bg-background p-6 shadow-2xl overflow-y-auto animate-slide-left flex flex-col justify-between">
@@ -561,6 +573,22 @@ function EmployeeDetailDrawer({ employee, onClose, onEdit, onDelete }) {
           </div>
 
           <div className="space-y-4 text-xs">
+            {/* Action Card: Send Note */}
+            <div className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-4 dark:border-indigo-900/50 dark:from-indigo-950/40 dark:to-purple-950/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold text-indigo-950 dark:text-indigo-200">Send Manager Note</div>
+                  <div className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80">Send quick instruction or task update (auto-deletes in 24h)</div>
+                </div>
+                <button
+                  onClick={onSendNote}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 shadow-md cursor-pointer"
+                >
+                  <Bell size={13} /> Send Note
+                </button>
+              </div>
+            </div>
+
             <div className="rounded-xl border border-border p-4 space-y-3 bg-muted/30">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Department</div>
@@ -608,10 +636,136 @@ function EmployeeDetailDrawer({ employee, onClose, onEdit, onDelete }) {
             Delete Employee
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-xs font-medium hover:bg-muted cursor-pointer">Close</button>
-            <button onClick={onEdit} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 cursor-pointer">Edit</button>
+            <button onClick={onSendNote} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 cursor-pointer flex items-center gap-1">
+              <Bell size={13} /> Note
+            </button>
+            <button onClick={onEdit} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 cursor-pointer">
+              Edit Profile
+            </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SendNotificationModal({ employee, onClose }) {
+  const { user } = useUser();
+  const api = useApi();
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const managerSenderName = user?.fullName || user?.firstName || user?.username || user?.primaryEmailAddress?.emailAddress || "Manager";
+
+  const presetNotes = [
+    "📄 Send proposal to XYZ company",
+    "⚡ Check the leads and follow up today",
+    "📅 Schedule client meeting for DGFT Advisory",
+    "🔥 High priority deal update required",
+    "📞 Call client contact person immediately",
+  ];
+
+  const handleSend = async (e) => {
+    e?.preventDefault();
+    if (!note.trim()) {
+      toast.error("Please enter a note message");
+      return;
+    }
+    try {
+      setSending(true);
+      const res = await api.post("/notifications", {
+        employeeId: employee._id,
+        employeeEmail: employee.email,
+        note: note.trim(),
+        senderName: managerSenderName,
+      });
+      if (res.data?.success) {
+        toast.success(`Notification note sent to ${employee.name}!`);
+        onClose();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to send notification note");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+              <Bell size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold">Send Notification Note</h2>
+              <p className="text-xs text-muted-foreground">Will appear in employee dashboard (auto-deletes in 24h)</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-muted cursor-pointer">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Target Employee Info */}
+        <div className="flex items-center gap-3 rounded-xl bg-muted/60 p-3">
+          <UserAvatar name={employee.name} size="sm" />
+          <div>
+            <div className="text-sm font-semibold">{employee.name}</div>
+            <div className="text-xs text-muted-foreground">{employee.role} · {employee.department}</div>
+          </div>
+        </div>
+
+        {/* Quick Suggestion Chips */}
+        <div>
+          <div className="text-[11px] font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Quick Note Presets</div>
+          <div className="flex flex-wrap gap-1.5">
+            {presetNotes.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setNote(preset)}
+                className="rounded-lg border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:border-indigo-500 hover:text-indigo-600 transition cursor-pointer"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Note Form */}
+        <form onSubmit={handleSend} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground mb-1">Manager Note / Work Instruction</label>
+            <textarea
+              required
+              rows={4}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Send proposal to XYZ company, check assigned leads for today..."
+              className="w-full rounded-xl border border-border bg-background p-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-border px-4 py-2 text-xs font-semibold hover:bg-muted cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={sending}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 shadow-md cursor-pointer disabled:opacity-50"
+            >
+              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              Send Notification
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

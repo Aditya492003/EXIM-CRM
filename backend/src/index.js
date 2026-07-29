@@ -18,6 +18,7 @@ import proposalsRoutes from "./routes/proposalsRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeesRoutes from "./routes/employeesRoutes.js";
 import templatesRoutes from "./routes/templatesRoutes.js";
+import notificationsRoutes from "./routes/notificationsRoutes.js";
 
 import path from "path";
 
@@ -56,6 +57,7 @@ app.use("/api/proposals",  proposalsRoutes);
 app.use("/api/dashboard",  dashboardRoutes);
 app.use("/api/employees",  employeesRoutes);
 app.use("/api/templates",  templatesRoutes);
+app.use("/api/notifications", notificationsRoutes);
 
 // 404 handler
 app.use((req, res) => {
