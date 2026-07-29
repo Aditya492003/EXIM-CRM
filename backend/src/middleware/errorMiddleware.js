@@ -1,11 +1,12 @@
 const errorMiddleware = (err, req, res, next) => {
-    console.error(err);
+    console.error("Unhandled API Error:", err);
 
-    const statusCode = err.statusCode || 500;
+    const statusCode = err.statusCode || err.http_code || 500;
 
     res.status(statusCode).json({
         success: false,
-        message: err.message || "Internal Server Error",
+        message: err.message || err.error?.message || "Internal Server Error",
+        error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
 };
 

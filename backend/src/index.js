@@ -17,8 +17,14 @@ import meetingsRoutes from "./routes/meetingsRoutes.js";
 import proposalsRoutes from "./routes/proposalsRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeesRoutes from "./routes/employeesRoutes.js";
+import templatesRoutes from "./routes/templatesRoutes.js";
+
+import path from "path";
 
 const app = express();
+
+// Serve local uploads folder statically
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // DB connection
 connectDb();
@@ -49,6 +55,7 @@ app.use("/api/meetings",   meetingsRoutes);
 app.use("/api/proposals",  proposalsRoutes);
 app.use("/api/dashboard",  dashboardRoutes);
 app.use("/api/employees",  employeesRoutes);
+app.use("/api/templates",  templatesRoutes);
 
 // 404 handler
 app.use((req, res) => {

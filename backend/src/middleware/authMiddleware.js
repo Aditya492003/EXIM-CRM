@@ -32,13 +32,13 @@ const requireAuth = async (req, res, next) => {
                     employee = await Employee.findByIdAndUpdate(
                         employeeIdFromMeta,
                         { clerkUserId: payload.sub },
-                        { new: true }
+                        { returnDocument: 'after' }
                     );
                 } else if (userEmail) {
                     employee = await Employee.findOneAndUpdate(
                         { email: userEmail },
                         { clerkUserId: payload.sub },
-                        { new: true }
+                        { returnDocument: 'after' }
                     );
                 }
             } catch (err) {

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -13,9 +13,11 @@ import {
   Upload,
   UploadCloud,
   X,
+  Loader2,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
+import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/proposals/templates")({
@@ -36,29 +38,44 @@ const defaultTemplates = [
 ];
 
 function TemplatesPage() {
+  const api = useApi();
+  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [dragOver, setDragOver] = useState(false);
   const [uploads, setUploads] = useState([]);
-  const [templatesList, setTemplatesList] = useState(() => {
-    try {
-      const saved = localStorage.getItem("crm_proposal_templates");
-      return saved ? JSON.parse(saved) : defaultTemplates;
-    } catch {
-      return defaultTemplates;
-    }
-  });
+  const [templatesList, setTemplatesList] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const inputRef = useRef(null);
 
-  // Sync to localStorage
-  useEffect(() => {
+  const fetchTemplates = useCallback(async () => {
     try {
-      localStorage.setItem("crm_proposal_templates", JSON.stringify(templatesList));
-    } catch (e) {
-      console.error("Failed to save templates to localStorage", e);
+      setLoading(true);
+      const res = await api.get("/templates");
+      const dbTemplates = res.data?.data || [];
+      const mapped = dbTemplates.map((t) => ({
+        id: t._id || t.id,
+        _id: t._id,
+        name: t.name,
+        description: t.description || "",
+        category: t.category || "Custom Upload",
+        format: t.format || "DOCX",
+        status: t.status || "Published",
+        usedCount: t.usedCount || 0,
+        fileUrl: t.fileUrl,
+      }));
+      setTemplatesList([...mapped, ...defaultTemplates]);
+    } catch (err) {
+      console.error("Failed to load Cloudinary templates", err);
+      setTemplatesList(defaultTemplates);
+    } finally {
+      setLoading(false);
     }
-  }, [templatesList]);
+  }, [api]);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
 
   const categories = ["All", "General", "Government", "Retainer", "Milestone", "Custom Upload"];
   const rows = templatesList.filter((t) => {
@@ -67,7 +84,7 @@ function TemplatesPage() {
     return q && c;
   });
 
-  function addFiles(files, customMeta = {}) {
+  async function addFiles(files, customMeta = {}) {
     if (!files || files.length === 0) return;
 
     const rawArray = Array.from(files);
@@ -83,54 +100,63 @@ function TemplatesPage() {
 
     if (validDocxFiles.length === 0) return;
 
-    const newUploadItems = validDocxFiles.map((f, i) => ({
-      id: `${Date.now()}-${i}`,
-      name: customMeta.name || f.name,
-      size: f.size,
-      format: "DOCX",
-      progress: 0,
-      done: false,
-      rawFile: f,
-    }));
+    for (const file of validDocxFiles) {
+      const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      const templateName = customMeta.name || file.name.replace(/\.[^/.]+$/, "");
+      const templateCategory = customMeta.category || "Custom Upload";
 
-    setUploads((prev) => [...newUploadItems, ...prev]);
+      setUploads((prev) => [
+        {
+          id: uploadId,
+          name: templateName,
+          size: file.size,
+          format: "DOCX",
+          progress: 30,
+          done: false,
+        },
+        ...prev,
+      ]);
 
-    newUploadItems.forEach((it) => {
-      let progressVal = 0;
-      const timer = setInterval(() => {
-        progressVal = Math.min(100, progressVal + 25 + Math.random() * 20);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("name", templateName);
+        formData.append("category", templateCategory);
+        if (customMeta.description) formData.append("description", customMeta.description);
+
         setUploads((prev) =>
-          prev.map((u) => {
-            if (u.id !== it.id) return u;
-            return { ...u, progress: progressVal, done: progressVal >= 100 };
-          })
+          prev.map((u) => (u.id === uploadId ? { ...u, progress: 70 } : u))
         );
 
-        if (progressVal >= 100) {
-          clearInterval(timer);
+        await api.post("/templates", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
 
-          // Add to templatesList when upload finishes
-          const newTemplateCard = {
-            id: `template-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-            name: customMeta.name || it.rawFile.name.replace(/\.[^/.]+$/, ""),
-            description: `Uploaded template (${(it.size / 1024).toFixed(1)} KB)`,
-            category: customMeta.category || "Custom Upload",
-            format: it.format,
-            status: "Published",
-            usedCount: 0,
-            fileUrl: URL.createObjectURL(it.rawFile),
-          };
+        setUploads((prev) =>
+          prev.map((u) => (u.id === uploadId ? { ...u, progress: 100, done: true } : u))
+        );
 
-          setTemplatesList((prev) => [newTemplateCard, ...prev]);
-          toast.success(`Template "${newTemplateCard.name}" uploaded and published!`);
-        }
-      }, 150);
-    });
+        toast.success(`Template "${templateName}" uploaded to Cloudinary & published!`);
+        fetchTemplates();
+      } catch (err) {
+        console.error("Cloudinary template upload error", err);
+        toast.error(err.response?.data?.message || `Failed to upload "${templateName}" to Cloudinary`);
+        setUploads((prev) => prev.filter((u) => u.id !== uploadId));
+      }
+    }
   }
 
-  const handleDeleteTemplate = (id, name) => {
-    setTemplatesList((prev) => prev.filter((t) => t.id !== id));
-    toast.success(`Template "${name}" removed`);
+  const handleDeleteTemplate = async (template) => {
+    if (!confirm(`Remove template "${template.name}"?`)) return;
+    try {
+      if (template._id) {
+        await api.delete(`/templates/${template._id}`);
+      }
+      setTemplatesList((prev) => prev.filter((t) => (t._id || t.id) !== (template._id || template.id)));
+      toast.success(`Template "${template.name}" removed`);
+    } catch (err) {
+      toast.error("Failed to delete template");
+    }
   };
 
   return (
@@ -266,17 +292,23 @@ function TemplatesPage() {
             </div>
           </div>
 
-          <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-            {rows.map((t) => (
-              <TemplateCard key={t.id} template={t} onDelete={() => handleDeleteTemplate(t.id, t.name)} />
-            ))}
-            {rows.length === 0 && (
-              <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
-                <FileText className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
-                No templates match your search. Drop a file above to upload one!
-              </div>
-            )}
-          </div>
+          {loading ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-indigo-500" />
+              <div className="mt-2 text-sm font-medium">Loading templates from Cloudinary & DB…</div>
+            </div>
+          ) : rows.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 p-4">
+              {rows.map((t) => (
+                <TemplateCard key={t._id || t.id} template={t} onDelete={() => handleDeleteTemplate(t)} />
+              ))}
+            </div>
+          ) : (
+            <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
+              <FileText className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
+              No templates match your search. Drop a file above to upload one!
+            </div>
+          )}
         </div>
       </div>
 
