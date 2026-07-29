@@ -188,16 +188,109 @@ function ContactsPage() {
   );
 }
 
-function AddContactModal({ onClose, onSuccess }) {
+// Searchable Company Combobox Component for Contacts
+export function CompanySearchSelect({ value, onChange, onCompanySelect }) {
+  const api = useApi();
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get("/companies");
+        setCompanies(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch companies for select", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCompanies();
+  }, [api]);
+
+  const filtered = useMemo(() => {
+    if (!value) return companies;
+    const s = value.toLowerCase();
+    return companies.filter(
+      (c) => c.name?.toLowerCase().includes(s) || c.email?.toLowerCase().includes(s) || c.phone?.includes(s)
+    );
+  }, [companies, value]);
+
+  return (
+    <div className="relative">
+      <input
+        required
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          onCompanySelect?.(null);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Type or select company from database…"
+        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+      />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl animate-fade-in">
+            {loading ? (
+              <div className="p-3 text-center text-xs text-muted-foreground">Loading companies database…</div>
+            ) : filtered.length > 0 ? (
+              filtered.map((c) => (
+                <button
+                  key={c._id || c.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(c.name);
+                    onCompanySelect?.(c);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg p-2 text-left hover:bg-muted transition cursor-pointer"
+                >
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">{c.name}</div>
+                    <div className="text-[10px] text-muted-foreground">{c.industry || "Company"}</div>
+                  </div>
+                  {c.phone && <div className="text-[10px] text-emerald-600 font-medium">{c.phone}</div>}
+                </button>
+              ))
+            ) : (
+              <div className="p-2.5 text-center text-xs text-muted-foreground">
+                No matching company found.
+                <div className="text-[10px] text-indigo-600 mt-0.5 font-medium">New company name will be saved with this contact.</div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function AddContactModal({ onClose, onSuccess, defaultCompany = "", defaultCompanyId = undefined }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    company: "",
+    company: defaultCompany,
+    companyId: defaultCompanyId,
     designation: "",
     phone: "",
     email: "",
   });
+
+  useEffect(() => {
+    if (defaultCompany) {
+      setFormData(prev => ({
+        ...prev,
+        company: defaultCompany,
+        companyId: defaultCompanyId
+      }));
+    }
+  }, [defaultCompany, defaultCompanyId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -229,7 +322,17 @@ function AddContactModal({ onClose, onSuccess }) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold">Company *</label>
-            <input required value={formData.company} onChange={(e) => setFormData({ ...formData, company: e.target.value })} placeholder="e.g. Acme Industries" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+            <CompanySearchSelect
+              value={formData.company}
+              onChange={(val) => setFormData({ ...formData, company: val })}
+              onCompanySelect={(c) => {
+                setFormData(prev => ({
+                  ...prev,
+                  company: c ? c.name : prev.company,
+                  companyId: c ? (c._id || c.id) : undefined,
+                }));
+              }}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

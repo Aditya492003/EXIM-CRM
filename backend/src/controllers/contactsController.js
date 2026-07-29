@@ -4,17 +4,33 @@ import Contact from "../models/Contact.js";
 // @route GET /api/contacts
 export const getContacts = async (req, res, next) => {
   try {
-    const { company, search } = req.query;
+    const { company, companyId, search } = req.query;
     const filter = { createdByClerkId: req.user?.clerkId };
 
-    if (company) filter.company = { $regex: company, $options: "i" };
+    if (companyId && company) {
+      filter.$or = [
+        { companyId: companyId },
+        { company: { $regex: company, $options: "i" } }
+      ];
+    } else if (companyId) {
+      filter.companyId = companyId;
+    } else if (company) {
+      filter.company = { $regex: company, $options: "i" };
+    }
 
     if (search) {
-      filter.$or = [
+      const searchCond = [
         { name: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
         { designation: { $regex: search, $options: "i" } },
+        { company: { $regex: search, $options: "i" } },
       ];
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchCond }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchCond;
+      }
     }
 
     const contacts = await Contact.find(filter).sort({ createdDate: -1 });

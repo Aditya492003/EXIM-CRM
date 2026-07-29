@@ -3,13 +3,14 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Building2, Download, Filter, Mail, Phone, Plus, Search, Upload, X,
   Pencil, Trash2, CheckCircle2, Loader2, Globe, FileText, ExternalLink,
-  ShieldCheck, AlertCircle, FileSpreadsheet, Eye, AlertTriangle
+  ShieldCheck, AlertCircle, FileSpreadsheet, Eye, AlertTriangle, Users
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
+import { AddContactModal } from "./contacts";
 
 export const Route = createFileRoute("/companies")({
   component: CompaniesPage,
@@ -280,7 +281,30 @@ export default function CompaniesPage() {
 
 /* ── Company Detail Drawer (Just like Lead Detail Drawer) ────── */
 function CompanyDetailDrawer({ company, onClose, onEdit, onDelete }) {
+  const api = useApi();
   const [tab, setTab] = useState("overview");
+  const [companyContacts, setCompanyContacts] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
+
+  const fetchCompanyContacts = useCallback(async () => {
+    if (!company) return;
+    try {
+      setLoadingContacts(true);
+      const res = await api.get("/contacts", {
+        params: { company: company.name, companyId: company._id }
+      });
+      setCompanyContacts(res.data?.data || []);
+    } catch (err) {
+      console.error("Failed to load company contacts", err);
+    } finally {
+      setLoadingContacts(false);
+    }
+  }, [api, company]);
+
+  useEffect(() => {
+    fetchCompanyContacts();
+  }, [fetchCompanyContacts]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
@@ -337,24 +361,29 @@ function CompanyDetailDrawer({ company, onClose, onEdit, onDelete }) {
               <Globe size={16} className="text-indigo-500" />
               <span>Website</span>
             </button>
-            <button onClick={onEdit} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
-              <Pencil size={16} className="text-indigo-500" />
-              <span>Edit</span>
+            <button onClick={() => setTab("contacts")} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
+              <Users size={16} className="text-indigo-500" />
+              <span>Contacts ({companyContacts.length})</span>
             </button>
           </div>
 
           {/* Navigation Tabs */}
           <div className="flex border-b border-border text-xs font-medium text-muted-foreground">
-            {["overview", "compliance", "deals", "notes"].map((t) => (
+            {["overview", "contacts", "compliance", "deals", "notes"].map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
                 className={cn(
-                  "px-4 py-2 capitalize transition border-b-2 cursor-pointer",
+                  "px-4 py-2 capitalize transition border-b-2 cursor-pointer flex items-center gap-1.5",
                   tab === t ? "border-indigo-600 font-bold text-indigo-600" : "border-transparent hover:text-foreground"
                 )}
               >
                 {t === "compliance" ? "Tax & Compliance" : t}
+                {t === "contacts" && (
+                  <span className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 px-1.5 py-0.2 text-[10px] font-bold text-indigo-600 dark:text-indigo-300">
+                    {companyContacts.length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -365,13 +394,133 @@ function CompanyDetailDrawer({ company, onClose, onEdit, onDelete }) {
               <div className="grid grid-cols-2 gap-4 rounded-xl border border-border p-4 bg-muted/30">
                 <InfoItem label="Company Name" value={company.name} highlight />
                 <InfoItem label="Industry" value={company.industry} />
-                <InfoItem label="Primary Contact" value={company.primaryContact || "Not assigned"} />
+                <InfoItem label="Primary Contact" value={company.primaryContact || (companyContacts[0]?.name) || "Not assigned"} />
                 <InfoItem label="Status" value={company.status} />
                 <InfoItem label="Phone" value={company.phone || "Not provided"} />
                 <InfoItem label="Email" value={company.email || "Not provided"} />
                 <InfoItem label="Assigned Manager" value={company.assignedManager || "Nikhil Rao"} />
                 <InfoItem label="Created Date" value={company.createdDate || "Recently"} />
               </div>
+
+              {/* Company Contacts Stack Preview */}
+              <div className="rounded-xl border border-border p-4 space-y-3 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-foreground flex items-center gap-1.5 text-xs">
+                    <Users size={14} className="text-indigo-500" /> Linked Contacts Stack ({companyContacts.length})
+                  </div>
+                  <button
+                    onClick={() => setShowAddContact(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:underline cursor-pointer"
+                  >
+                    <Plus size={12} /> Add Contact
+                  </button>
+                </div>
+
+                {companyContacts.length > 0 ? (
+                  <div className="space-y-2">
+                    {companyContacts.slice(0, 3).map((contact) => (
+                      <div key={contact._id || contact.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-2.5 shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                          <UserAvatar name={contact.name} size="xs" />
+                          <div>
+                            <div className="font-semibold text-xs text-foreground">{contact.name}</div>
+                            <div className="text-[10px] text-muted-foreground">{contact.designation || "Key Contact"}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          {contact.phone && <a href={`tel:${contact.phone}`} className="text-muted-foreground hover:text-indigo-600"><Phone size={12} /></a>}
+                          {contact.email && <a href={`mailto:${contact.email}`} className="text-muted-foreground hover:text-indigo-600"><Mail size={12} /></a>}
+                        </div>
+                      </div>
+                    ))}
+                    {companyContacts.length > 3 && (
+                      <button onClick={() => setTab("contacts")} className="w-full text-center text-[11px] font-medium text-indigo-600 hover:underline cursor-pointer pt-1">
+                        View all {companyContacts.length} contacts →
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center text-[11px] text-muted-foreground py-2">
+                    No individual contacts added for this company yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === "contacts" && (
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-foreground">Company Contacts Stack ({companyContacts.length})</div>
+                <button
+                  onClick={() => setShowAddContact(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:shadow-md transition cursor-pointer"
+                >
+                  <Plus size={13} /> Add Contact
+                </button>
+              </div>
+
+              {loadingContacts ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
+                  <div className="mt-2 text-xs">Loading company contacts stack…</div>
+                </div>
+              ) : companyContacts.length > 0 ? (
+                <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
+                  {companyContacts.map((contact) => (
+                    <div
+                      key={contact._id || contact.id}
+                      className="flex items-center justify-between rounded-xl border border-border bg-card p-3.5 shadow-sm hover:border-indigo-300 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <UserAvatar name={contact.name} size="md" />
+                        <div>
+                          <div className="font-bold text-sm text-foreground">{contact.name}</div>
+                          <div className="text-xs text-muted-foreground">{contact.designation || "Executive"}</div>
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                            {contact.phone && <span>📞 {contact.phone}</span>}
+                            {contact.email && <span>✉️ {contact.email}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {contact.phone && (
+                          <a
+                            href={`tel:${contact.phone}`}
+                            className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer transition"
+                            title={`Call ${contact.phone}`}
+                          >
+                            <Phone size={14} />
+                          </a>
+                        )}
+                        {contact.email && (
+                          <a
+                            href={`mailto:${contact.email}`}
+                            className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer transition"
+                            title={`Email ${contact.email}`}
+                          >
+                            <Mail size={14} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground space-y-2">
+                  <Users size={28} className="mx-auto text-muted-foreground/60" />
+                  <div className="font-semibold text-sm text-foreground">No contacts linked to {company.name}</div>
+                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                    Key decision makers and personnel added for this company will stack here.
+                  </p>
+                  <button
+                    onClick={() => setShowAddContact(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition cursor-pointer mt-2"
+                  >
+                    <Plus size={14} /> Add First Contact
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -410,6 +559,17 @@ function CompanyDetailDrawer({ company, onClose, onEdit, onDelete }) {
           </button>
         </div>
       </div>
+
+      {showAddContact && (
+        <AddContactModal
+          defaultCompany={company.name}
+          defaultCompanyId={company._id}
+          onClose={() => setShowAddContact(false)}
+          onSuccess={() => {
+            fetchCompanyContacts();
+          }}
+        />
+      )}
     </div>
   );
 }

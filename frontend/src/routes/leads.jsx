@@ -47,6 +47,11 @@ function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [sourceFilter, setSourceFilter] = useState("All");
+  const [assignedFilter, setAssignedFilter] = useState("All");
+  const [serviceFilter, setServiceFilter] = useState("All");
+  const [enquiryFilter, setEnquiryFilter] = useState("All");
+  const [regionFilter, setRegionFilter] = useState("");
   const [quick, setQuick] = useState("All Leads");
   const [selected, setSelected] = useState(new Set());
   const [page, setPage] = useState(1);
@@ -174,20 +179,88 @@ function LeadsPage() {
   };
   const isVisible = (key) => visibleCols.has(key);
 
+  const availableSources = useMemo(() => {
+    const defaultList = ["All", "Website", "LinkedIn", "Referral", "Cold Call", "Trade Show", "Partner", "Google Ads", "Other"];
+    const fromData = leadsList.map((l) => l.source).filter(Boolean);
+    return Array.from(new Set([...defaultList, ...fromData]));
+  }, [leadsList]);
+
+  const availableAssigned = useMemo(() => {
+    const set = new Set(leadsList.map((l) => l.assignedTo).filter(Boolean));
+    return ["All", ...Array.from(set)];
+  }, [leadsList]);
+
+  const availableServices = useMemo(() => {
+    const set = new Set(leadsList.map((l) => l.service).filter(Boolean));
+    return ["All", ...Array.from(set)];
+  }, [leadsList]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter !== "All") count++;
+    if (sourceFilter !== "All") count++;
+    if (assignedFilter !== "All") count++;
+    if (serviceFilter !== "All") count++;
+    if (enquiryFilter !== "All") count++;
+    if (regionFilter.trim() !== "") count++;
+    return count;
+  }, [statusFilter, sourceFilter, assignedFilter, serviceFilter, enquiryFilter, regionFilter]);
+
+  const resetFilters = useCallback(() => {
+    setStatusFilter("All");
+    setSourceFilter("All");
+    setAssignedFilter("All");
+    setServiceFilter("All");
+    setEnquiryFilter("All");
+    setRegionFilter("");
+  }, []);
+
   const filtered = useMemo(() => {
     let out = leadsList;
     if (statusFilter !== "All") out = out.filter((l) => l.status === statusFilter);
+    if (sourceFilter !== "All") out = out.filter((l) => l.source === sourceFilter);
+    if (assignedFilter !== "All") out = out.filter((l) => l.assignedTo === assignedFilter);
+    if (serviceFilter !== "All") out = out.filter((l) => l.service === serviceFilter);
+    if (enquiryFilter !== "All") out = out.filter((l) => (l.enquiryStatus || "Open") === enquiryFilter);
+    if (regionFilter.trim()) {
+      const r = regionFilter.toLowerCase().trim();
+      out = out.filter((l) => l.region && l.region.toLowerCase().includes(r));
+    }
+
     if (quick === "New Leads") out = out.filter((l) => l.status === "New");
-    if (quick === "Favorites") out = out.filter((l) => favorites.has(l.id));
+    else if (quick === "Favorites") out = out.filter((l) => favorites.has(l.id));
+    else if (quick === "Today's Leads") {
+      const todayStr = new Date().toLocaleDateString("en-IN");
+      out = out.filter((l) => l.createdDate === todayStr);
+    } else if (quick === "Unassigned") {
+      out = out.filter((l) => !l.assignedTo || l.assignedTo === "Unassigned");
+    } else if (quick === "Follow-up Today") {
+      const todayStr = new Date().toLocaleDateString("en-IN");
+      out = out.filter((l) => l.nextFollowUp === todayStr);
+    } else if (quick === "Overdue") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      out = out.filter((l) => {
+        if (!l.nextFollowUp) return false;
+        const d = new Date(l.nextFollowUp);
+        return !isNaN(d) && d < today;
+      });
+    }
+
     if (search) {
       const s = search.toLowerCase();
       out = out.filter(
-        (l) => l.name.toLowerCase().includes(s) || l.email.toLowerCase().includes(s) ||
-          l.company.toLowerCase().includes(s) || (l.service && l.service.toLowerCase().includes(s)) || l.phone.includes(s),
+        (l) =>
+          l.name.toLowerCase().includes(s) ||
+          l.email.toLowerCase().includes(s) ||
+          l.company.toLowerCase().includes(s) ||
+          (l.service && l.service.toLowerCase().includes(s)) ||
+          l.phone.includes(s) ||
+          (l.region && l.region.toLowerCase().includes(s)),
       );
     }
     return out;
-  }, [leadsList, statusFilter, quick, search, favorites]);
+  }, [leadsList, statusFilter, sourceFilter, assignedFilter, serviceFilter, enquiryFilter, regionFilter, quick, search, favorites]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -221,7 +294,22 @@ function LeadsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <IconButton onClick={() => setOpenFilter(true)}><Filter size={14} /> Filters</IconButton>
+            <button
+              onClick={() => setOpenFilter(true)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition cursor-pointer",
+                activeFilterCount > 0
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300"
+                  : "border-border bg-card hover:bg-muted"
+              )}
+            >
+              <Filter size={14} /> Filters
+              {activeFilterCount > 0 && (
+                <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
             <IconButton onClick={handleExportCSV}><Download size={14} /> Export CSV</IconButton>
             <div className="relative">
               <IconButton onClick={() => setOpenColumns(!openColumns)}>
@@ -286,6 +374,52 @@ function LeadsPage() {
             </select>
           </div>
         </div>
+
+        {/* Active Filter Chips */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
+            <span className="text-muted-foreground font-medium text-[11px]">Active Filters:</span>
+            {statusFilter !== "All" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                Status: {statusFilter}
+                <button onClick={() => setStatusFilter("All")} className="hover:text-indigo-900 cursor-pointer"><X size={12} /></button>
+              </span>
+            )}
+            {sourceFilter !== "All" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                Source: {sourceFilter}
+                <button onClick={() => setSourceFilter("All")} className="hover:text-indigo-900 cursor-pointer"><X size={12} /></button>
+              </span>
+            )}
+            {assignedFilter !== "All" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                Assigned: {assignedFilter}
+                <button onClick={() => setAssignedFilter("All")} className="hover:text-indigo-900 cursor-pointer"><X size={12} /></button>
+              </span>
+            )}
+            {serviceFilter !== "All" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                Service: {serviceFilter}
+                <button onClick={() => setServiceFilter("All")} className="hover:text-indigo-900 cursor-pointer"><X size={12} /></button>
+              </span>
+            )}
+            {enquiryFilter !== "All" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                Enquiry: {enquiryFilter}
+                <button onClick={() => setEnquiryFilter("All")} className="hover:text-indigo-900 cursor-pointer"><X size={12} /></button>
+              </span>
+            )}
+            {regionFilter.trim() !== "" && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                Region: {regionFilter}
+                <button onClick={() => setRegionFilter("")} className="hover:text-indigo-900 cursor-pointer"><X size={12} /></button>
+              </span>
+            )}
+            <button onClick={resetFilters} className="text-[11px] text-muted-foreground underline hover:text-foreground cursor-pointer">
+              Clear all
+            </button>
+          </div>
+        )}
 
         {/* Main Table */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -408,6 +542,22 @@ function LeadsPage() {
           onClose={() => setActive(null)}
           onEdit={() => { setEditing(active); setActive(null); }}
           onDelete={() => handleDelete(active)}
+        />
+      )}
+
+      {openFilter && (
+        <FilterLeadsModal
+          onClose={() => setOpenFilter(false)}
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
+          assignedFilter={assignedFilter} setAssignedFilter={setAssignedFilter}
+          serviceFilter={serviceFilter} setServiceFilter={setServiceFilter}
+          enquiryFilter={enquiryFilter} setEnquiryFilter={setEnquiryFilter}
+          regionFilter={regionFilter} setRegionFilter={setRegionFilter}
+          availableSources={availableSources}
+          availableAssigned={availableAssigned}
+          availableServices={availableServices}
+          onReset={resetFilters}
         />
       )}
 
@@ -786,8 +936,8 @@ function AddLeadModal({ onClose, onSuccess }) {
     }
     const updates = {};
     const filled = { phone: false, email: false, websiteUrl: false };
-    if (companyObj.phone)   { updates.phone      = companyObj.phone;   filled.phone      = true; }
-    if (companyObj.email)   { updates.email      = companyObj.email;   filled.email      = true; }
+    if (companyObj.phone) { updates.phone = companyObj.phone; filled.phone = true; }
+    if (companyObj.email) { updates.email = companyObj.email; filled.email = true; }
     if (companyObj.website) { updates.websiteUrl = companyObj.website; filled.websiteUrl = true; }
     setFormData(prev => ({ ...prev, ...updates }));
     setAutofilled(filled);
@@ -1158,3 +1308,99 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
     </div>
   );
 }
+
+/* ── Filter Leads Modal ────────────────────────────── */
+function FilterLeadsModal({
+  onClose,
+  statusFilter, setStatusFilter,
+  sourceFilter, setSourceFilter,
+  assignedFilter, setAssignedFilter,
+  serviceFilter, setServiceFilter,
+  enquiryFilter, setEnquiryFilter,
+  regionFilter, setRegionFilter,
+  availableSources, availableAssigned, availableServices,
+  onReset
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl animate-scale-in space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div>
+            <h2 className="text-lg font-bold">Filter Leads</h2>
+            <p className="text-xs text-muted-foreground">Filter lead records across status, source, advisor, service, and region.</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
+        </div>
+
+        <div className="space-y-4 text-xs">
+          <div>
+            <label className="mb-1.5 block font-semibold text-foreground">Lead Status</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400 cursor-pointer">
+              <option value="All">All Statuses</option>
+              {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block font-semibold text-foreground">Lead Source</label>
+              <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400 cursor-pointer">
+                {availableSources.map((s) => <option key={s} value={s}>{s === "All" ? "All Sources" : s}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block font-semibold text-foreground">Assigned To</label>
+              <select value={assignedFilter} onChange={(e) => setAssignedFilter(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400 cursor-pointer">
+                {availableAssigned.map((a) => <option key={a} value={a}>{a === "All" ? "All Staff" : a}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block font-semibold text-foreground">Service / Job</label>
+              <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400 cursor-pointer">
+                {availableServices.map((s) => <option key={s} value={s}>{s === "All" ? "All Services" : s}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block font-semibold text-foreground">Enquiry Status</label>
+              <select value={enquiryFilter} onChange={(e) => setEnquiryFilter(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400 cursor-pointer">
+                <option value="All">All Enquiry Statuses</option>
+                {ENQUIRY_STATUSES.map((e) => <option key={e} value={e}>{e}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block font-semibold text-foreground">Region / Country</label>
+            <input
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value)}
+              placeholder="e.g. UAE, Singapore, Mumbai"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={onReset}
+            className="rounded-xl border border-border px-3.5 py-2 text-xs font-medium hover:bg-muted cursor-pointer text-muted-foreground hover:text-foreground"
+          >
+            Reset Filters
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md cursor-pointer hover:shadow-lg transition"
+          >
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
