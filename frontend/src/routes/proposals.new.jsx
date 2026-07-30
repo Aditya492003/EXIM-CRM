@@ -24,6 +24,8 @@ import {
   Plus,
   Trash2,
   Eye,
+  Mail,
+  Send,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
@@ -53,6 +55,7 @@ const DEFAULT_PLACEHOLDERS = [
   { key: "date",           label: "Proposal Date",    category: "General" },
   { key: "client_name",    label: "Client Company",   category: "Client" },
   { key: "contact_person", label: "Contact Person",  category: "Client" },
+  { key: "client_email",   label: "Client Email",     category: "Client" },
   { key: "address",        label: "Client Address",   category: "Client" },
   { key: "service_fee",    label: "Service Fee (₹)",  category: "Commercial" },
   { key: "proposal_no",    label: "Proposal Number",  category: "General" },
@@ -74,6 +77,7 @@ function NewProposalPage() {
   const [loadingServices, setLoadingServices] = useState(true);
   const [dbTemplates, setDbTemplates] = useState([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [emailSuccessModalData, setEmailSuccessModalData] = useState(null);
 
   useEffect(() => {
     api.get("/employees").then(res => setEmployees(res.data?.data || [])).catch(() => {});
@@ -91,30 +95,137 @@ function NewProposalPage() {
       .finally(() => setLoadingTemplates(false));
   }, [api]);
 
+  const generateCompiledDocxFile = () => {
+    if (!templateBuffer) return null;
+    try {
+      const zip = new PizZip(templateBuffer);
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{", end: "}" },
+      });
+
+      const dataToRender = { ...formData };
+      customFields.forEach((cf) => {
+        if (cf.key) dataToRender[cf.key] = cf.value;
+      });
+
+      doc.render(dataToRender);
+
+      const outBlob = doc.getZip().generate({
+        type: "blob",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+
+      const fileName = `${formData.client_name || "Proposal"}_${formData.proposal_no || "PRO"}.docx`.replace(/[^a-zA-Z0-9._-]/g, "_");
+      return new File([outBlob], fileName, {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+    } catch (err) {
+      console.error("Failed to generate compiled DOCX document", err);
+      return null;
+    }
+  };
+
   const handleSaveAndSendProposal = async () => {
     try {
       setSavingProposal(true);
       const numericValue = parseFloat(String(formData.service_fee || "").replace(/[^0-9.]/g, "")) || 0;
-      const payload = {
-        title: `${formData.client_name || "Client"} - Proposal`,
-        client: formData.client_name || clientObj?.name || "Client",
-        service: serviceObj?.title || serviceObj?.name || "Services",
-        value: numericValue,
-        status: "Sent",
-        validTill: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        assignedTo: assignedTo || null,
-      };
-      const res = await api.post("/proposals", payload);
+      const targetEmail = (formData.client_email || clientObj?.email || "").trim();
+
+      const compiledFile = generateCompiledDocxFile();
+
+      const fd = new FormData();
+      fd.append("title", `${formData.client_name || "Client"} - Proposal`);
+      fd.append("client", formData.client_name || clientObj?.name || "Client");
+      fd.append("clientEmail", targetEmail);
+      fd.append("service", serviceObj?.title || serviceObj?.name || "Services");
+      fd.append("value", String(numericValue));
+      fd.append("status", "Sent");
+      fd.append("assignedTo", assignedTo || "");
+      fd.append("sendEmail", "true");
+
+      if (compiledFile) {
+        fd.append("attachment", compiledFile);
+      } else if (selectedTemplate?.fileUrl) {
+        fd.append("attachmentUrl", selectedTemplate.fileUrl);
+      }
+
+      const res = await api.post("/proposals", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
       if (res.data?.success) {
-        toast.success("Proposal saved & marked as Sent — proceeding to Export!");
+        const msg = res.data?.emailMessage || (targetEmail ? `Proposal email & edited document sent directly to ${targetEmail} via Nodemailer!` : "Proposal saved & marked as Sent");
+        toast.success(msg);
         setSaved(true);
+
+        // Open Email Success Pop-up Modal!
+        setEmailSuccessModalData({
+          to: targetEmail || "Client Email",
+          clientName: formData.client_name || clientObj?.name || "Client",
+          proposalNo: formData.proposal_no || "PRO-2026-001",
+          serviceFee: formData.service_fee || "0",
+          docName: `${formData.client_name || "Proposal"}_${formData.proposal_no || "PRO"}.docx`.replace(/[^a-zA-Z0-9._-]/g, "_"),
+          message: res.data?.emailMessage || "Proposal email & compiled edited document delivered directly via Nodemailer!",
+        });
+
         // Auto-advance to Export step
         setStepIdx(5);
       }
     } catch (err) {
-      toast.error("Failed to save proposal to database");
+      console.error("Failed to save and send proposal", err);
+      toast.error(err.response?.data?.message || "Failed to save proposal to database");
     } finally {
       setSavingProposal(false);
+    }
+  };
+
+  const [sendingDirectEmail, setSendingDirectEmail] = useState(false);
+
+  const handleSendDirectEmail = async () => {
+    const targetEmail = (formData.client_email || clientObj?.email || "").trim();
+    if (!targetEmail) {
+      toast.error("Please enter a client email address in the placeholder form");
+      return;
+    }
+    try {
+      setSendingDirectEmail(true);
+      const compiledFile = generateCompiledDocxFile();
+
+      const fd = new FormData();
+      fd.append("recipientEmail", targetEmail);
+      fd.append("clientName", formData.client_name || clientObj?.name || "Client");
+      fd.append("proposalNumber", formData.proposal_no || "PRO-2026-001");
+      fd.append("title", `${formData.client_name || "Client"} - Proposal`);
+      fd.append("serviceFee", String(formData.service_fee || "0"));
+
+      if (compiledFile) {
+        fd.append("attachment", compiledFile);
+      }
+
+      const res = await api.post("/proposals/send-email", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (res.data?.success) {
+        toast.success(res.data?.message || `Proposal email & edited document delivered directly to ${targetEmail}!`);
+        
+        // Open Email Success Pop-up Modal!
+        setEmailSuccessModalData({
+          to: targetEmail || "Client Email",
+          clientName: formData.client_name || clientObj?.name || "Client",
+          proposalNo: formData.proposal_no || "PRO-2026-001",
+          serviceFee: formData.service_fee || "0",
+          docName: `${formData.client_name || "Proposal"}_${formData.proposal_no || "PRO"}.docx`.replace(/[^a-zA-Z0-9._-]/g, "_"),
+          message: res.data?.message || `Proposal email & edited document delivered directly to ${targetEmail}!`,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to send direct email", err);
+      toast.error(err.response?.data?.message || "Failed to send direct proposal email");
+    } finally {
+      setSendingDirectEmail(false);
     }
   };
 
@@ -163,6 +274,7 @@ function NewProposalPage() {
     proposal_no: "ASC/2026-27/00192",
     client_name: "Tata Consultancy Services Limited",
     contact_person: "Mr. Satheendran S",
+    client_email: "satheendran@tcs.com",
     address: "10th Flr., A Wing, Kensington, SEZ Powai - Mumbai 400 076",
     service_fee: "2,40,000",
     validity: "30 Days",
@@ -187,6 +299,7 @@ function NewProposalPage() {
         ...prev,
         client_name: clientObj.name,
         contact_person: clientObj.primaryContact || "Primary Contact",
+        client_email: clientObj.email || prev.client_email || "",
         address: clientObj.address || `${clientObj.industry || "General"} Sector`,
       }));
     }
@@ -879,10 +992,18 @@ function NewProposalPage() {
           <div className="mt-4 text-sm font-bold">Export PDF</div>
           <div className="mt-0.5 text-[11px] text-white/70">High-fidelity print format</div>
         </button>
-        <button className="group rounded-2xl bg-gradient-to-br from-amber-500 to-rose-500 p-6 text-left text-white shadow-lg shadow-amber-500/25 transition hover:-translate-y-1 hover:shadow-xl">
-          <Sparkles size={24} />
-          <div className="mt-4 text-sm font-bold">Send to Client</div>
-          <div className="mt-0.5 text-[11px] text-white/70">Email with attachment</div>
+        <button
+          onClick={handleSendDirectEmail}
+          disabled={sendingDirectEmail}
+          className="group rounded-2xl bg-gradient-to-br from-amber-500 to-rose-500 p-6 text-left text-white shadow-lg shadow-amber-500/25 transition hover:-translate-y-1 hover:shadow-xl cursor-pointer disabled:opacity-60"
+        >
+          <Mail size={24} />
+          <div className="mt-4 text-sm font-bold">
+            {sendingDirectEmail ? "Dispatching Email…" : "Send Email to Client"}
+          </div>
+          <div className="mt-0.5 text-[11px] text-white/80 font-medium">
+            {formData.client_email ? `Direct Nodemailer to ${formData.client_email}` : "Direct email (No Gmail app needed)"}
+          </div>
         </button>
       </div>
       <button
@@ -1018,7 +1139,94 @@ function NewProposalPage() {
           )}
         </div>
       </div>
+
+      {/* Email Success Pop-up Modal */}
+      {emailSuccessModalData && (
+        <EmailSuccessModal
+          data={emailSuccessModalData}
+          onClose={() => setEmailSuccessModalData(null)}
+          onExport={handleExportDocx}
+        />
+      )}
     </AppLayout>
+  );
+}
+
+function EmailSuccessModal({ data, onClose, onExport }) {
+  if (!data) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-3xl border border-indigo-200/80 bg-card p-6 shadow-2xl space-y-5 dark:border-indigo-900/60">
+        
+        {/* Animated Header */}
+        <div className="text-center space-y-2">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/30">
+            <CheckCircle2 size={36} />
+          </div>
+          <h2 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
+            Proposal Email Delivered! 🎉
+          </h2>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            The customized proposal with filled commercial details has been sent directly to the client's inbox via Nodemailer.
+          </p>
+        </div>
+
+        {/* Details Card */}
+        <div className="rounded-2xl border border-border bg-muted/40 p-4 space-y-3 text-xs">
+          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Recipient Client Email</span>
+            <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+              <Mail size={13} /> {data.to}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Client Company</span>
+            <span className="font-semibold text-foreground">{data.clientName}</span>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Proposal Ref No.</span>
+            <span className="font-semibold text-foreground">{data.proposalNo}</span>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Commercial Value</span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{data.serviceFee}</span>
+          </div>
+
+          <div className="flex items-center justify-between pt-0.5">
+            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Attached Document</span>
+            <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[200px]" title={data.docName}>
+              📄 {data.docName}
+            </span>
+          </div>
+        </div>
+
+        {/* Status Badge */}
+        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 text-xs text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300">
+          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+          <span className="font-medium">{data.message}</span>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border">
+          <button
+            onClick={onExport}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold hover:bg-muted cursor-pointer"
+          >
+            <Download size={14} /> Save DOCX File
+          </button>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 cursor-pointer"
+          >
+            Done / Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

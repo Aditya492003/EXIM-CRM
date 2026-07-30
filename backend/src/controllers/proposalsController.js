@@ -1,4 +1,5 @@
 import Proposal from "../models/Proposal.js";
+import { sendProposalEmail } from "../config/email.js";
 
 // Helper: auto-generate proposal number e.g. PRO-2025-001
 const generateProposalNumber = async (clerkId) => {
@@ -9,8 +10,6 @@ const generateProposalNumber = async (clerkId) => {
 };
 
 // Helper: build user-scoped filter
-// - Managers see all proposals they created OR proposals assigned to any employee under them
-// - Employees see proposals assigned to them OR proposals they created themselves
 const userFilter = (req, extra = {}) => {
   const filter = { ...extra };
   if (req.user?.role === "employee") {
@@ -24,7 +23,6 @@ const userFilter = (req, extra = {}) => {
     }
     filter.$or = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
   } else {
-    // Manager: see all proposals they created OR proposals assigned to any employee
     filter.createdByClerkId = req.user?.clerkId;
   }
   return filter;
@@ -61,7 +59,7 @@ export const getProposals = async (req, res, next) => {
   }
 };
 
-// @desc  Get single proposal (scoped per role)
+// @desc  Get single proposal
 // @route GET /api/proposals/:id
 export const getProposal = async (req, res, next) => {
   try {
@@ -75,32 +73,98 @@ export const getProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Create proposal (Available to both Managers and Employees — no approval required)
+// @desc  Create proposal & automatically send email if recipient address provided
 // @route POST /api/proposals
 export const createProposal = async (req, res, next) => {
   try {
     const number = await generateProposalNumber(req.user?.clerkId);
-
-    // Default status is "Sent" if not specified (skip Draft/Approve flow)
     const status = req.body.status || "Sent";
+    const recipientEmail = (req.body.clientEmail || req.body.email || "").trim();
 
     const proposal = await Proposal.create({
       ...req.body,
       number,
       status,
-      attachmentUrl: req.file?.path || undefined,
+      clientEmail: recipientEmail || undefined,
+      attachmentUrl: req.file?.path || req.body.attachmentUrl || undefined,
       createdByClerkId: req.user?.clerkId,
-      // sentDate auto-set when status is Sent
       sentDate: status === "Sent" ? new Date() : undefined,
     });
 
-    res.status(201).json({ success: true, data: proposal });
+    let emailResult = null;
+    let emailErrorMsg = null;
+    if (recipientEmail && (status === "Sent" || req.body.sendEmail !== false)) {
+      try {
+        emailResult = await sendProposalEmail({
+          to: recipientEmail,
+          clientName: proposal.client,
+          proposalNumber: proposal.number,
+          title: proposal.title,
+          serviceFee: proposal.value,
+          fileUrl: proposal.attachmentUrl,
+          attachmentFile: req.file,
+        });
+      } catch (eErr) {
+        console.error("Failed to send automatic proposal email:", eErr.message);
+        emailErrorMsg = eErr.message;
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      data: proposal,
+      emailSent: emailResult?.success || false,
+      emailMessage: emailResult?.message || (emailErrorMsg ? `Proposal saved, but email error: ${emailErrorMsg}` : undefined),
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc  Update proposal (scoped per role)
+// @desc  Send proposal email directly to client via Nodemailer (No Gmail app opening needed)
+// @route POST /api/proposals/send-email
+export const sendProposalDirectEmail = async (req, res, next) => {
+  try {
+    const { proposalId, recipientEmail, clientName, proposalNumber, title, serviceFee, fileUrl } = req.body;
+    const to = (recipientEmail || req.body.to || req.body.clientEmail || "").trim();
+
+    if (!to) {
+      return res.status(400).json({ success: false, message: "Recipient client email address is required" });
+    }
+
+    const docUrl = req.file?.path || fileUrl;
+
+    const emailResult = await sendProposalEmail({
+      to,
+      clientName: clientName || "Valued Client",
+      proposalNumber: proposalNumber || "N/A",
+      title: title || "Proposal",
+      serviceFee: serviceFee || "0",
+      fileUrl: docUrl || undefined,
+      attachmentFile: req.file,
+    });
+
+    if (proposalId) {
+      const updateData = {
+        status: "Sent",
+        clientEmail: to,
+        sentDate: new Date(),
+      };
+      if (req.file?.path) updateData.attachmentUrl = req.file.path;
+      await Proposal.findByIdAndUpdate(proposalId, updateData);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: emailResult,
+      message: emailResult.message,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Update proposal
 // @route PUT /api/proposals/:id
 export const updateProposal = async (req, res, next) => {
   try {
@@ -121,7 +185,7 @@ export const updateProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Update proposal status only (User-scoped)
+// @desc  Update proposal status only
 // @route PATCH /api/proposals/:id/status
 export const updateProposalStatus = async (req, res, next) => {
   try {
@@ -146,7 +210,7 @@ export const updateProposalStatus = async (req, res, next) => {
   }
 };
 
-// @desc  Delete proposal (User-scoped)
+// @desc  Delete proposal
 // @route DELETE /api/proposals/:id
 export const deleteProposal = async (req, res, next) => {
   try {

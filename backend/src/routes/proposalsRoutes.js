@@ -5,6 +5,7 @@ import {
   getProposals,
   getProposal,
   createProposal,
+  sendProposalDirectEmail,
   updateProposal,
   updateProposalStatus,
   deleteProposal,
@@ -13,6 +14,8 @@ import {
 const router = express.Router();
 
 router.use(requireAuth);
+
+router.post("/send-email", upload.single("attachment"), sendProposalDirectEmail);
 
 router.route("/").get(getProposals).post(upload.single("attachment"), createProposal);
 router.route("/:id")

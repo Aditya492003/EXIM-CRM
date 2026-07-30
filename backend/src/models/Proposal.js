@@ -21,6 +21,10 @@ const ProposalSchema = new Schema({
   client: {
     type: String
   },
+  clientEmail: {
+    type: String,
+    trim: true
+  },
   clientId: {
     type: Schema.Types.ObjectId,
     ref: 'Company'
