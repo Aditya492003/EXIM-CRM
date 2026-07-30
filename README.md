@@ -579,6 +579,3 @@ See `frontend/.env.example` and `backend/.env.example` for all required variable
 ---
 
 *Built for **Exim Nexus** — India's Export-Import Trade Advisory CRM. All values in Indian Rupees (₹).*
-ascdevelopment26_db_user
-aqyOBuS5f6jGFQ27
-mongodb+srv://ascdevelopment26_db_user:aqyOBuS5f6jGFQ27@exim-crm.dqddr0v.mongodb.net/?appName=exim-crm
