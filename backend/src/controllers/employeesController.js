@@ -96,25 +96,46 @@ export const inviteEmployee = async (req, res, next) => {
 // @route POST /api/employees/sync
 export const syncEmployee = async (req, res, next) => {
   try {
-    const { userId } = req.auth; 
+    const userId = req.user?.clerkId || req.auth?.userId; 
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    const user = await clerkClient.users.getUser(userId);
-    const employeeId = user.publicMetadata?.employeeId;
+    let employee = await Employee.findOne({ clerkUserId: userId });
 
-    if (!employeeId) {
-      return res.status(400).json({ success: false, message: "No employeeId linked to this Clerk account." });
+    if (!employee) {
+      try {
+        const user = await clerkClient.users.getUser(userId);
+        const userEmail = user?.emailAddresses?.[0]?.emailAddress?.toLowerCase();
+        const employeeIdFromMeta = user?.publicMetadata?.employeeId;
+
+        if (employeeIdFromMeta) {
+          employee = await Employee.findByIdAndUpdate(
+            employeeIdFromMeta,
+            { clerkUserId: userId, lastLogin: Date.now() },
+            { new: true }
+          );
+        } else if (userEmail) {
+          employee = await Employee.findOneAndUpdate(
+            { email: userEmail },
+            { clerkUserId: userId, lastLogin: Date.now() },
+            { new: true }
+          );
+        }
+      } catch (cErr) {
+        console.warn("Clerk user lookup during syncEmployee skipped:", cErr.message);
+      }
+    } else {
+      employee.lastLogin = Date.now();
+      await employee.save();
     }
 
-    const employee = await Employee.findByIdAndUpdate(
-      employeeId,
-      { clerkUserId: userId, lastLogin: Date.now() },
-      { new: true }
-    );
-
-    res.status(200).json({ success: true, data: employee });
+    return res.status(200).json({
+      success: true,
+      data: employee || null,
+      message: employee ? "Employee synced successfully" : "User is not linked to an employee record",
+    });
   } catch (error) {
-    next(error);
+    console.error("syncEmployee error:", error);
+    return res.status(200).json({ success: false, message: error.message });
   }
 };
 

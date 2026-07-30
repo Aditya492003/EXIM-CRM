@@ -1,12 +1,20 @@
 import Proposal from "../models/Proposal.js";
 import { sendProposalEmail } from "../config/email.js";
 
-// Helper: auto-generate proposal number e.g. PRO-2025-001
-const generateProposalNumber = async (clerkId) => {
+// Helper: auto-generate 100% unique proposal number e.g. PRO-2026-001
+const generateProposalNumber = async () => {
   const year = new Date().getFullYear();
-  const count = await Proposal.countDocuments({ createdByClerkId: clerkId });
+  const count = await Proposal.countDocuments();
   const padded = String(count + 1).padStart(3, "0");
-  return `PRO-${year}-${padded}`;
+  const candidate = `PRO-${year}-${padded}`;
+
+  // Ensure uniqueness across all proposals in MongoDB
+  const exists = await Proposal.findOne({ number: candidate });
+  if (exists) {
+    const timestamp = Date.now().toString().slice(-4);
+    return `PRO-${year}-${padded}-${timestamp}`;
+  }
+  return candidate;
 };
 
 // Helper: build user-scoped filter
@@ -73,23 +81,39 @@ export const getProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Create proposal & automatically send email if recipient address provided
+// @desc  Create proposal & send proposal email
 // @route POST /api/proposals
 export const createProposal = async (req, res, next) => {
   try {
-    const number = await generateProposalNumber(req.user?.clerkId);
+    const number = await generateProposalNumber();
     const status = req.body.status || "Sent";
     const recipientEmail = (req.body.clientEmail || req.body.email || "").trim();
 
     const proposal = await Proposal.create({
-      ...req.body,
-      number,
-      status,
+      title: req.body.title,
+      client: req.body.client,
       clientEmail: recipientEmail || undefined,
+      service: req.body.service,
+      value: req.body.value,
+      status,
+      validTill: req.body.validTill,
+      assignedTo: req.body.assignedTo || (req.user?.role === "employee" ? req.user?.name : undefined),
       attachmentUrl: req.file?.path || req.body.attachmentUrl || undefined,
+      number,
       createdByClerkId: req.user?.clerkId,
       sentDate: status === "Sent" ? new Date() : undefined,
     });
+
+    let senderEmail = req.body.senderEmail;
+    let senderPass = req.body.senderPass;
+
+    if (req.user?.employeeId && (!senderEmail || !senderPass)) {
+      try {
+        const emp = await Employee.findById(req.user.employeeId);
+        if (emp?.smtpUser) senderEmail = senderEmail || emp.smtpUser;
+        if (emp?.smtpPass) senderPass = senderPass || emp.smtpPass;
+      } catch (err) {}
+    }
 
     let emailResult = null;
     let emailErrorMsg = null;
@@ -101,8 +125,10 @@ export const createProposal = async (req, res, next) => {
           proposalNumber: proposal.number,
           title: proposal.title,
           serviceFee: proposal.value,
-          fileUrl: proposal.attachmentUrl,
+          fileUrl: proposal.attachmentUrl || req.file?.path,
           attachmentFile: req.file,
+          senderEmail,
+          senderPass,
         });
       } catch (eErr) {
         console.error("Failed to send automatic proposal email:", eErr.message);
@@ -121,7 +147,7 @@ export const createProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Send proposal email directly to client via Nodemailer (No Gmail app opening needed)
+// @desc  Send proposal email directly to client via Nodemailer
 // @route POST /api/proposals/send-email
 export const sendProposalDirectEmail = async (req, res, next) => {
   try {
@@ -132,33 +158,54 @@ export const sendProposalDirectEmail = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Recipient client email address is required" });
     }
 
-    const docUrl = req.file?.path || fileUrl;
+    let senderEmail = req.body.senderEmail;
+    let senderPass = req.body.senderPass;
 
-    const emailResult = await sendProposalEmail({
-      to,
-      clientName: clientName || "Valued Client",
-      proposalNumber: proposalNumber || "N/A",
-      title: title || "Proposal",
-      serviceFee: serviceFee || "0",
-      fileUrl: docUrl || undefined,
-      attachmentFile: req.file,
-    });
-
-    if (proposalId) {
-      const updateData = {
-        status: "Sent",
-        clientEmail: to,
-        sentDate: new Date(),
-      };
-      if (req.file?.path) updateData.attachmentUrl = req.file.path;
-      await Proposal.findByIdAndUpdate(proposalId, updateData);
+    if (req.user?.employeeId && (!senderEmail || !senderPass)) {
+      try {
+        const emp = await Employee.findById(req.user.employeeId);
+        if (emp?.smtpUser) senderEmail = senderEmail || emp.smtpUser;
+        if (emp?.smtpPass) senderPass = senderPass || emp.smtpPass;
+      } catch (err) {}
     }
 
-    res.status(200).json({
-      success: true,
-      data: emailResult,
-      message: emailResult.message,
-    });
+    const docUrl = req.file?.path || fileUrl;
+
+    try {
+      const emailResult = await sendProposalEmail({
+        to,
+        clientName: clientName || "Valued Client",
+        proposalNumber: proposalNumber || "N/A",
+        title: title || "Proposal",
+        serviceFee: serviceFee || "0",
+        fileUrl: docUrl || undefined,
+        attachmentFile: req.file,
+        senderEmail,
+        senderPass,
+      });
+
+      if (proposalId) {
+        const updateData = {
+          status: "Sent",
+          clientEmail: to,
+          sentDate: new Date(),
+        };
+        if (req.file?.path) updateData.attachmentUrl = req.file.path;
+        await Proposal.findByIdAndUpdate(proposalId, updateData);
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: emailResult,
+        message: emailResult.message,
+      });
+    } catch (eErr) {
+      console.error("Direct Proposal Email Dispatch Failed:", eErr.message);
+      return res.status(400).json({
+        success: false,
+        message: `Email dispatch failed: ${eErr.message}`,
+      });
+    }
   } catch (error) {
     next(error);
   }

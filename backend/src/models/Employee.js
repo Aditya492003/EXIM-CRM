@@ -49,6 +49,16 @@ const EmployeeSchema = new Schema({
   lastLogin: {
     type: Date,
   },
+  // Optional custom SMTP credentials for employee's own Gmail account
+  smtpUser: {
+    type: String,
+    trim: true,
+    lowercase: true,
+  },
+  smtpPass: {
+    type: String,
+    trim: true,
+  },
 });
 
 const Employee = mongoose.model('Employee', EmployeeSchema);
