@@ -2,11 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
-  Search, Globe, Phone, Mail, Loader2, RefreshCw, Building2
+  Search, Globe, Phone, Mail, Loader2, RefreshCw, Building2, Plus, Handshake
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
+import { AddLeadModal } from "./leads";
+import { AddDealModal } from "./deals";
 
 export const Route = createFileRoute("/employee/companies")({
   component: EmployeeCompaniesPage,
@@ -23,6 +25,8 @@ function EmployeeCompaniesPage() {
   const [companies, setCompanies] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [openAddLeadCompany, setOpenAddLeadCompany] = useState(null);
+  const [openAddDealCompany, setOpenAddDealCompany] = useState(null);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -77,14 +81,15 @@ function EmployeeCompaniesPage() {
                   <th className="px-5 py-3">Email</th>
                   <th className="px-5 py-3 text-center">Open Deals</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {loading ? (
-                  <tr><td colSpan="7" className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
+                  <tr><td colSpan="8" className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
                 ) : companies.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="p-12 text-center">
+                    <td colSpan="8" className="p-12 text-center">
                       <Building2 className="mx-auto h-8 w-8 text-muted-foreground/40" />
                       <p className="mt-2 text-sm text-muted-foreground">No companies found in database.</p>
                     </td>
@@ -122,6 +127,24 @@ function EmployeeCompaniesPage() {
                           {c.status || "Active"}
                         </span>
                       </td>
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setOpenAddLeadCompany(c.name)}
+                            title="Make Lead for this Company"
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition cursor-pointer dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300"
+                          >
+                            <Plus size={12} /> Lead
+                          </button>
+                          <button
+                            onClick={() => setOpenAddDealCompany(c.name)}
+                            title="Make Deal for this Company"
+                            className="inline-flex items-center gap-1 rounded-lg bg-violet-50 border border-violet-200 px-2 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-100 transition cursor-pointer dark:bg-violet-950/50 dark:border-violet-800 dark:text-violet-300"
+                          >
+                            <Handshake size={12} /> Deal
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -131,9 +154,27 @@ function EmployeeCompaniesPage() {
         </div>
 
         <div className="rounded-2xl border border-indigo-200 bg-indigo-50/70 dark:bg-indigo-500/10 dark:border-indigo-500/20 p-4 text-xs text-indigo-700 dark:text-indigo-300">
-          <span className="font-semibold">ℹ️ Shared Company Directory:</span> All company records are shared across the workspace to streamline proposal generation and prevent data duplication. Employees can view all companies for reference and proposal building (read-only mode).
+          <span className="font-semibold">ℹ️ Shared Company Directory:</span> All company records are shared across the workspace. You can create Leads, Deals, and Contacts for any company directly from this table!
         </div>
       </div>
+
+      {/* Make Lead Modal for Company */}
+      {openAddLeadCompany && (
+        <AddLeadModal
+          defaultCompany={openAddLeadCompany}
+          onClose={() => setOpenAddLeadCompany(null)}
+          onSuccess={fetchCompanies}
+        />
+      )}
+
+      {/* Make Deal Modal for Company */}
+      {openAddDealCompany && (
+        <AddDealModal
+          defaultCompany={openAddDealCompany}
+          onClose={() => setOpenAddDealCompany(null)}
+          onSuccess={fetchCompanies}
+        />
+      )}
     </AppLayout>
   );
 }

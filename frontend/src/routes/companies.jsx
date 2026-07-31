@@ -11,6 +11,9 @@ import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { AddContactModal } from "./contacts";
+import { AddLeadModal } from "./leads";
+import { AddDealModal } from "./deals";
+import { Handshake, Sparkles, Target } from "lucide-react";
 
 export const Route = createFileRoute("/companies")({
   component: CompaniesPage,
@@ -33,6 +36,8 @@ export default function CompaniesPage() {
   const [status, setStatus] = useState("All");
   const [industryFilter, setIndustryFilter] = useState("All");
   const [openAdd, setOpenAdd] = useState(false);
+  const [openAddLeadCompany, setOpenAddLeadCompany] = useState(null);
+  const [openAddDealCompany, setOpenAddDealCompany] = useState(null);
 
   const fetchCompanies = useCallback(async () => {
     try {
@@ -214,7 +219,21 @@ export default function CompaniesPage() {
                       <td className="px-4 py-3 text-xs font-medium">{c.phone || "—"}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{c.email || "—"}</td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                        <div className="flex items-center justify-end gap-1.5 opacity-90 transition group-hover:opacity-100">
+                          <button
+                            onClick={() => setOpenAddLeadCompany(c.name)}
+                            title="Make Lead for this Company"
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition cursor-pointer dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300"
+                          >
+                            <Plus size={12} /> Lead
+                          </button>
+                          <button
+                            onClick={() => setOpenAddDealCompany(c.name)}
+                            title="Make Deal for this Company"
+                            className="inline-flex items-center gap-1 rounded-lg bg-violet-50 border border-violet-200 px-2 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-100 transition cursor-pointer dark:bg-violet-950/50 dark:border-violet-800 dark:text-violet-300"
+                          >
+                            <Handshake size={12} /> Deal
+                          </button>
                           <button
                             onClick={() => setActive(c)}
                             title="View Detail Drawer"
@@ -261,6 +280,26 @@ export default function CompaniesPage() {
           onClose={() => setActive(null)}
           onEdit={() => { setEditing(active); setActive(null); }}
           onDelete={() => handleDeleteCompany(active)}
+          onMakeLead={(comp) => { setOpenAddLeadCompany(comp.name || comp); setActive(null); }}
+          onMakeDeal={(comp) => { setOpenAddDealCompany(comp.name || comp); setActive(null); }}
+        />
+      )}
+
+      {/* Make Lead Modal for Company */}
+      {openAddLeadCompany && (
+        <AddLeadModal
+          defaultCompany={openAddLeadCompany}
+          onClose={() => setOpenAddLeadCompany(null)}
+          onSuccess={fetchCompanies}
+        />
+      )}
+
+      {/* Make Deal Modal for Company */}
+      {openAddDealCompany && (
+        <AddDealModal
+          defaultCompany={openAddDealCompany}
+          onClose={() => setOpenAddDealCompany(null)}
+          onSuccess={fetchCompanies}
         />
       )}
 
@@ -280,7 +319,7 @@ export default function CompaniesPage() {
 }
 
 /* ── Company Detail Drawer (Just like Lead Detail Drawer) ────── */
-function CompanyDetailDrawer({ company, onClose, onEdit, onDelete }) {
+function CompanyDetailDrawer({ company, onClose, onEdit, onDelete, onMakeLead, onMakeDeal }) {
   const api = useApi();
   const [tab, setTab] = useState("overview");
   const [companyContacts, setCompanyContacts] = useState([]);
@@ -332,6 +371,33 @@ function CompanyDetailDrawer({ company, onClose, onEdit, onDelete }) {
                 <Trash2 size={16} />
               </button>
               <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={18} /></button>
+            </div>
+          </div>
+
+          {/* Quick Creation & Business Actions Banner */}
+          <div className="rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/80 via-violet-50/60 to-purple-50/80 p-3.5 dark:border-indigo-900/60 dark:from-indigo-950/40 dark:to-purple-950/40 space-y-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+              <Sparkles size={13} /> Business Creation Actions for {company.name}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => onMakeLead && onMakeLead(company)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition cursor-pointer"
+              >
+                <Plus size={14} /> Make Lead
+              </button>
+              <button
+                onClick={() => onMakeDeal && onMakeDeal(company)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-violet-700 transition cursor-pointer"
+              >
+                <Handshake size={14} /> Make Deal
+              </button>
+              <button
+                onClick={() => setShowAddContact(true)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 transition cursor-pointer"
+              >
+                <Users size={14} /> Add Contact
+              </button>
             </div>
           </div>
 

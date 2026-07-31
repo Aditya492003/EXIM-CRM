@@ -429,12 +429,12 @@ function CompanySearchSelect({ value, onChange }) {
   );
 }
 
-function AddDealModal({ defaultStage, onClose, onSuccess }) {
+export function AddDealModal({ defaultStage = "New", defaultCompany = "", onClose, onSuccess }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
-    company: "",
+    name: defaultCompany ? `${defaultCompany} - New Deal` : "",
+    company: defaultCompany || "",
     value: 500000,
     stage: defaultStage || "New",
     priority: "Medium",

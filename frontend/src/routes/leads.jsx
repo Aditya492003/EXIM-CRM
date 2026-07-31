@@ -910,13 +910,13 @@ function InfoItem({ label, value, highlight, danger }) {
 }
 
 /* ── Add Lead Modal ──────────────────────────────────── */
-function AddLeadModal({ onClose, onSuccess }) {
+export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClose, onSuccess }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
   const [autofilled, setAutofilled] = useState({ phone: false, email: false, websiteUrl: false });
   const [formData, setFormData] = useState({
     name: "",
-    company: "",
+    company: defaultCompany || "",
     service: "DGFT Advisory",
     phone: "",
     email: "",
