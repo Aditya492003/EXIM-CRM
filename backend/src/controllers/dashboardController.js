@@ -115,7 +115,7 @@ export const getLeadGrowth = async (req, res, next) => {
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const result = data.map((d) => ({
       month: months[d._id.month - 1],
       leads: d.leads,
@@ -149,7 +149,7 @@ export const getRevenue = async (req, res, next) => {
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const result = data.map((d) => ({
       month: months[d._id.month - 1],
       revenue: d.revenue,
