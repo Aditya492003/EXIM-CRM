@@ -4,25 +4,41 @@ import Company from "../models/Company.js";
 import Proposal from "../models/Proposal.js";
 import Meeting from "../models/Meeting.js";
 
-const getBaseFilter = (req, extra = {}) => {
+// Helper: build workspace-isolated filter for dashboard queries
+const getWorkspaceFilter = (req, extra = {}) => {
+  const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+  const workspaceCond = [
+    { workspaceManagerId: workspaceManagerId },
+    { createdByClerkId: workspaceManagerId },
+    { sharedWithManagerIds: workspaceManagerId }
+  ];
+
   const filter = { ...extra };
+
   if (req.user?.role === "employee") {
-    filter.assignedTo = req.user.name;
+    const empMatch = [];
+    if (req.user.name) {
+      empMatch.push({ assignedTo: req.user.name });
+      empMatch.push({ assignedTo: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
+      empMatch.push({ assignedManager: req.user.name });
+    }
+    if (req.user.clerkId) {
+      empMatch.push({ createdByClerkId: req.user.clerkId });
+      empMatch.push({ assignedToClerkId: req.user.clerkId });
+    }
+    const empCond = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+    filter.$and = [
+      { $or: workspaceCond },
+      { $or: empCond }
+    ];
   } else {
-    filter.createdByClerkId = req.user?.clerkId;
+    filter.$or = workspaceCond;
   }
+
   return filter;
 };
 
-const getCompanyFilter = (req, extra = {}) => {
-  const filter = { ...extra };
-  if (req.user?.role === "employee") {
-    filter.assignedManager = req.user.name;
-  }
-  return filter;
-};
-
-// @desc  Get KPI stats for dashboard cards (user-scoped where private)
+// @desc  Get KPI stats for dashboard cards (Workspace-scoped)
 // @route GET /api/dashboard/stats
 export const getStats = async (req, res, next) => {
   try {
@@ -30,6 +46,12 @@ export const getStats = async (req, res, next) => {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const filterAll = getWorkspaceFilter(req);
+    const filterTodayLeads = getWorkspaceFilter(req, { createdDate: { $gte: today, $lt: tomorrow } });
+    const filterActiveCompanies = getWorkspaceFilter(req, { status: "Active" });
+    const filterOpenDeals = getWorkspaceFilter(req, { stage: { $nin: ["Won", "Lost"] } });
+    const filterMeetings = getWorkspaceFilter(req, { status: "Scheduled" });
 
     const [
       totalLeads,
@@ -40,16 +62,16 @@ export const getStats = async (req, res, next) => {
       pipelineResult,
       scheduledMeetings,
     ] = await Promise.all([
-      Lead.countDocuments(getBaseFilter(req)),
-      Lead.countDocuments(getBaseFilter(req, { createdDate: { $gte: today, $lt: tomorrow } })),
-      Company.countDocuments(getCompanyFilter(req, { status: "Active" })),
-      Deal.countDocuments(getBaseFilter(req, { stage: { $nin: ["Won", "Lost"] } })),
-      Proposal.countDocuments(getBaseFilter(req)),
+      Lead.countDocuments(filterAll),
+      Lead.countDocuments(filterTodayLeads),
+      Company.countDocuments(filterActiveCompanies),
+      Deal.countDocuments(filterOpenDeals),
+      Proposal.countDocuments(filterAll),
       Deal.aggregate([
-        { $match: getBaseFilter(req, { stage: { $nin: ["Won", "Lost"] } }) },
+        { $match: filterOpenDeals },
         { $group: { _id: null, total: { $sum: "$value" } } },
       ]),
-      Meeting.countDocuments(getBaseFilter(req, { status: "Scheduled" })), // assuming meeting has assignedTo if employee, otherwise fallback
+      Meeting.countDocuments(filterMeetings),
     ]);
 
     const pipelineValue = pipelineResult[0]?.total || 0;
@@ -71,7 +93,7 @@ export const getStats = async (req, res, next) => {
   }
 };
 
-// @desc  Get monthly lead growth (last 12 months) — user-scoped
+// @desc  Get monthly lead growth (last 12 months) — Workspace-scoped
 // @route GET /api/dashboard/lead-growth
 export const getLeadGrowth = async (req, res, next) => {
   try {
@@ -80,8 +102,10 @@ export const getLeadGrowth = async (req, res, next) => {
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
+    const filter = getWorkspaceFilter(req, { createdDate: { $gte: twelveMonthsAgo } });
+
     const data = await Lead.aggregate([
-      { $match: getBaseFilter(req, { createdDate: { $gte: twelveMonthsAgo } }) },
+      { $match: filter },
       {
         $group: {
           _id: { year: { $year: "$createdDate" }, month: { $month: "$createdDate" } },
@@ -103,7 +127,7 @@ export const getLeadGrowth = async (req, res, next) => {
   }
 };
 
-// @desc  Get monthly revenue from Won deals (last 12 months) — user-scoped
+// @desc  Get monthly revenue from Won deals (last 12 months) — Workspace-scoped
 // @route GET /api/dashboard/revenue
 export const getRevenue = async (req, res, next) => {
   try {
@@ -112,8 +136,10 @@ export const getRevenue = async (req, res, next) => {
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
+    const filter = getWorkspaceFilter(req, { stage: "Won", closedDate: { $gte: twelveMonthsAgo } });
+
     const data = await Deal.aggregate([
-      { $match: getBaseFilter(req, { stage: "Won", closedDate: { $gte: twelveMonthsAgo } }) },
+      { $match: filter },
       {
         $group: {
           _id: { year: { $year: "$closedDate" }, month: { $month: "$closedDate" } },
@@ -135,12 +161,14 @@ export const getRevenue = async (req, res, next) => {
   }
 };
 
-// @desc  Get deal count per stage — user-scoped
+// @desc  Get deal count per stage — Workspace-scoped
 // @route GET /api/dashboard/deals-by-stage
 export const getDealsByStage = async (req, res, next) => {
   try {
+    const filter = getWorkspaceFilter(req);
+
     const data = await Deal.aggregate([
-      { $match: getBaseFilter(req) },
+      { $match: filter },
       { $group: { _id: "$stage", count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
@@ -153,12 +181,14 @@ export const getDealsByStage = async (req, res, next) => {
   }
 };
 
-// @desc  Get lead count per source — user-scoped
+// @desc  Get lead count per source — Workspace-scoped
 // @route GET /api/dashboard/lead-sources
 export const getLeadSources = async (req, res, next) => {
   try {
+    const filter = getWorkspaceFilter(req);
+
     const data = await Lead.aggregate([
-      { $match: getBaseFilter(req) },
+      { $match: filter },
       { $group: { _id: "$source", value: { $sum: 1 } } },
       { $sort: { value: -1 } },
     ]);
@@ -171,12 +201,14 @@ export const getLeadSources = async (req, res, next) => {
   }
 };
 
-// @desc  Get team performance per assignedTo name — user-scoped (won deals by this user)
+// @desc  Get team performance per assignedTo name — Workspace-scoped
 // @route GET /api/dashboard/performance
 export const getTeamPerformance = async (req, res, next) => {
   try {
+    const filter = getWorkspaceFilter(req, { stage: "Won" });
+
     const data = await Deal.aggregate([
-      { $match: getBaseFilter(req, { stage: "Won" }) },
+      { $match: filter },
       {
         $group: {
           _id: "$assignedTo",
@@ -200,7 +232,7 @@ export const getTeamPerformance = async (req, res, next) => {
   }
 };
 
-// @desc  Global search across Leads, Companies, Deals, Meetings, and Proposals
+// @desc  Global search across Leads, Companies, Deals, Meetings, and Proposals (Workspace-scoped)
 // @route GET /api/dashboard/search
 export const globalSearch = async (req, res, next) => {
   try {
@@ -215,21 +247,21 @@ export const globalSearch = async (req, res, next) => {
     const regex = new RegExp(q.trim(), "i");
 
     const [leads, companies, deals, meetings, proposals] = await Promise.all([
-      Lead.find({
+      Lead.find(getWorkspaceFilter(req, {
         $or: [{ name: regex }, { company: regex }, { email: regex }, { phone: regex }],
-      }).limit(5),
-      Company.find({
+      })).limit(5),
+      Company.find(getWorkspaceFilter(req, {
         $or: [{ name: regex }, { primaryContact: regex }, { industry: regex }, { email: regex }],
-      }).limit(5),
-      Deal.find({
+      })).limit(5),
+      Deal.find(getWorkspaceFilter(req, {
         $or: [{ title: regex }, { company: regex }, { contactPerson: regex }],
-      }).limit(5),
-      Meeting.find({
+      })).limit(5),
+      Meeting.find(getWorkspaceFilter(req, {
         $or: [{ title: regex }, { company: regex }, { attendee: regex }],
-      }).limit(5),
-      Proposal.find({
-        $or: [{ title: regex }, { companyName: regex }, { proposalNumber: regex }],
-      }).limit(5),
+      })).limit(5),
+      Proposal.find(getWorkspaceFilter(req, {
+        $or: [{ title: regex }, { client: regex }, { number: regex }],
+      })).limit(5),
     ]);
 
     res.status(200).json({
@@ -240,4 +272,3 @@ export const globalSearch = async (req, res, next) => {
     next(error);
   }
 };
-
