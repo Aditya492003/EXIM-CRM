@@ -162,9 +162,10 @@ export default function EmployeesPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Employee</th>
+                  <th className="px-4 py-3">Team Member</th>
                   <th className="px-4 py-3">Role / Designation</th>
                   <th className="px-4 py-3">Department</th>
+                  <th className="px-4 py-3">Assigned Work Load</th>
                   <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Joined Date</th>
@@ -201,6 +202,19 @@ export default function EmployeesPage() {
                         <span className="inline-flex items-center rounded-lg bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
                           {emp.department}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-md bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/50 dark:border-blue-800 dark:text-blue-300" title="Assigned Leads">
+                            {emp.leadsCount || 0} Leads
+                          </span>
+                          <span className="rounded-md bg-purple-50 border border-purple-200 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 dark:bg-purple-950/50 dark:border-purple-800 dark:text-purple-300" title="Assigned Deals">
+                            {emp.dealsCount || 0} Deals
+                          </span>
+                          <span className="rounded-md bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300" title="Proposals">
+                            {emp.proposalsCount || 0} Proposals
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs">
                         <div>{emp.phone || "—"}</div>
@@ -332,8 +346,8 @@ function AddEmployeeModal({ onClose, onSuccess }) {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await api.post("/employees/invite", form);
-      toast.success("Employee invited successfully. They will receive an email.");
+      const res = await api.post("/employees/invite", form);
+      toast.success(res.data?.message || "Invite sent successfully");
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -586,6 +600,25 @@ function EmployeeDetailDrawer({ employee, onClose, onEdit, onDelete, onSendNote 
                 >
                   <Bell size={13} /> Send Note
                 </button>
+              </div>
+            </div>
+
+            {/* Workload Stats Card */}
+            <div className="rounded-2xl border border-border p-4 bg-muted/20 space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Workload Summary</div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-2.5 dark:border-blue-900/40 dark:bg-blue-950/30">
+                  <div className="text-lg font-extrabold text-blue-700 dark:text-blue-300">{employee.leadsCount || 0}</div>
+                  <div className="text-[10px] font-semibold text-blue-600/80 dark:text-blue-400">Leads</div>
+                </div>
+                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-2.5 dark:border-purple-900/40 dark:bg-purple-950/30">
+                  <div className="text-lg font-extrabold text-purple-700 dark:text-purple-300">{employee.dealsCount || 0}</div>
+                  <div className="text-[10px] font-semibold text-purple-600/80 dark:text-purple-400">Deals</div>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                  <div className="text-lg font-extrabold text-emerald-700 dark:text-emerald-300">{employee.proposalsCount || 0}</div>
+                  <div className="text-[10px] font-semibold text-emerald-600/80 dark:text-emerald-400">Proposals</div>
+                </div>
               </div>
             </div>
 

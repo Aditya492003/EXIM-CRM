@@ -19,12 +19,15 @@ export const sendNotification = async (req, res, next) => {
 
     const senderName = req.body.senderName || req.user?.name || req.user?.email || "Manager";
 
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+
     const notification = await Notification.create({
       employeeId: targetEmployee?._id || (employeeId ? employeeId : undefined),
       employeeEmail: targetEmployee?.email || employeeEmail?.toLowerCase(),
       employeeClerkId: targetEmployee?.clerkUserId || undefined,
       senderName: senderName,
       senderClerkId: req.user?.clerkId,
+      workspaceManagerId: workspaceManagerId,
       note: note.trim(),
       read: false,
     });

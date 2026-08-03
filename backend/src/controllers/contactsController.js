@@ -1,15 +1,17 @@
 import Contact from "../models/Contact.js";
 
-// Helper: build base filter based on user role
-// Managers see ALL contacts (shared pool), employees only see their own
+// Helper: build base filter based on workspaceManagerId
 function buildBaseFilter(req) {
-  if (req.user?.role === "manager") {
-    return {}; // No restriction — all contacts visible to managers
-  }
-  return { createdByClerkId: req.user?.clerkId }; // Employees see only their own
+  const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+  return {
+    $or: [
+      { workspaceManagerId: workspaceManagerId },
+      { createdByClerkId: workspaceManagerId }
+    ]
+  };
 }
 
-// @desc  Get all contacts (Managers: all contacts; Employees: own contacts)
+// @desc  Get all contacts for current workspace
 // @route GET /api/contacts
 export const getContacts = async (req, res, next) => {
   try {
@@ -17,9 +19,13 @@ export const getContacts = async (req, res, next) => {
     const filter = buildBaseFilter(req);
 
     if (companyId && company) {
-      filter.$or = [
-        { companyId: companyId },
-        { company: { $regex: company, $options: "i" } }
+      filter.$and = [
+        {
+          $or: [
+            { companyId: companyId },
+            { company: { $regex: company, $options: "i" } }
+          ]
+        }
       ];
     } else if (companyId) {
       filter.companyId = companyId;
@@ -28,17 +34,18 @@ export const getContacts = async (req, res, next) => {
     }
 
     if (search) {
-      const searchCond = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { designation: { $regex: search, $options: "i" } },
-        { company: { $regex: search, $options: "i" } },
-      ];
-      if (filter.$or) {
-        filter.$and = [{ $or: filter.$or }, { $or: searchCond }];
-        delete filter.$or;
+      const searchCond = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { designation: { $regex: search, $options: "i" } },
+          { company: { $regex: search, $options: "i" } },
+        ]
+      };
+      if (filter.$and) {
+        filter.$and.push(searchCond);
       } else {
-        filter.$or = searchCond;
+        filter.$and = [searchCond];
       }
     }
 
@@ -50,7 +57,7 @@ export const getContacts = async (req, res, next) => {
   }
 };
 
-// @desc  Get single contact (Managers: any; Employees: own only)
+// @desc  Get single contact (Workspace-scoped)
 // @route GET /api/contacts/:id
 export const getContact = async (req, res, next) => {
   try {
@@ -64,14 +71,16 @@ export const getContact = async (req, res, next) => {
   }
 };
 
-// @desc  Create contact (stamped with clerkId of creator)
+// @desc  Create contact (Stamps workspaceManagerId)
 // @route POST /api/contacts
 export const createContact = async (req, res, next) => {
   try {
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
     const contact = await Contact.create({
       ...req.body,
       avatarUrl: req.file?.path || undefined,
       createdByClerkId: req.user?.clerkId,
+      workspaceManagerId: workspaceManagerId,
     });
 
     res.status(201).json({ success: true, data: contact });
@@ -80,7 +89,7 @@ export const createContact = async (req, res, next) => {
   }
 };
 
-// @desc  Update contact (Managers: any; Employees: own only)
+// @desc  Update contact (Workspace-scoped)
 // @route PUT /api/contacts/:id
 export const updateContact = async (req, res, next) => {
   try {
@@ -101,7 +110,7 @@ export const updateContact = async (req, res, next) => {
   }
 };
 
-// @desc  Delete contact (Managers: any; Employees: own only)
+// @desc  Delete contact (Workspace-scoped)
 // @route DELETE /api/contacts/:id
 export const deleteContact = async (req, res, next) => {
   try {

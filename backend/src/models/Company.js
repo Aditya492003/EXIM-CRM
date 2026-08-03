@@ -74,6 +74,21 @@ const CompanySchema = new Schema({
     createdByClerkId: {
         type: String
     },
+    workspaceManagerId: {
+        type: String,
+        index: true
+    },
+    sharedWithManagerIds: {
+        type: [String],
+        default: [],
+        index: true
+    },
+    ownerManagerName: {
+        type: String
+    },
+    ownerManagerEmail: {
+        type: String
+    },
     createdDate: {
         type: Date,
         default: Date.now

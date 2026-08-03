@@ -1,11 +1,20 @@
 import Company from "../models/Company.js";
+import { clerkClient } from "@clerk/clerk-sdk-node";
 
-// Helper: build user-scoped filter (Companies are fully shared across Manager and Employee portals)
+// Helper: build workspace-isolated filter (includes shared companies)
 const userFilter = (req, extra = {}) => {
-  return { ...extra };
+  const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+  return {
+    ...extra,
+    $or: [
+      { workspaceManagerId: workspaceManagerId },
+      { createdByClerkId: workspaceManagerId },
+      { sharedWithManagerIds: workspaceManagerId }
+    ]
+  };
 };
 
-// @desc  Get all companies (Shared across all users — Managers & Employees)
+// @desc  Get all companies for current workspace (including shared companies)
 // @route GET /api/companies
 export const getCompanies = async (req, res, next) => {
   try {
@@ -29,7 +38,7 @@ export const getCompanies = async (req, res, next) => {
   }
 };
 
-// @desc  Get single company
+// @desc  Get single company (Workspace-scoped)
 // @route GET /api/companies/:id
 export const getCompany = async (req, res, next) => {
   try {
@@ -43,10 +52,10 @@ export const getCompany = async (req, res, next) => {
   }
 };
 
-
+// @desc  Create company (Global Deduplication Check & Owner Manager Stamping)
+// @route POST /api/companies
 export const createCompany = async (req, res, next) => {
   try {
-    // Restrict employees from creating company records directly (or allow if required, but read-only edit/delete is enforced)
     const { name, email, phone, gstin } = req.body;
 
     if (!name || !name.trim()) {
@@ -58,31 +67,86 @@ export const createCompany = async (req, res, next) => {
     const trimmedPhone = phone?.trim();
     const trimmedGstin = gstin?.trim()?.toUpperCase();
 
-    // Check if a company with matching Name, Email, Phone or GSTIN already exists in shared DB
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+
+    // Build conditions for scanning Name, Phone, and Email/Gmail
     const orConditions = [{ name: new RegExp(`^${trimmedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") }];
     if (trimmedEmail) orConditions.push({ email: trimmedEmail });
     if (trimmedPhone) orConditions.push({ phone: trimmedPhone });
     if (trimmedGstin) orConditions.push({ gstin: trimmedGstin });
 
-    const existingCompany = await Company.findOne({ $or: orConditions });
+    // 1. Check if duplicate exists within CURRENT workspace
+    const localDuplicate = await Company.findOne({
+      $or: [
+        { workspaceManagerId: workspaceManagerId },
+        { createdByClerkId: workspaceManagerId },
+        { sharedWithManagerIds: workspaceManagerId }
+      ],
+      $and: [{ $or: orConditions }]
+    });
 
-    if (existingCompany) {
-      let matchedReason = `Name "${existingCompany.name}"`;
-      if (trimmedName.toLowerCase() === existingCompany.name.toLowerCase()) {
-        matchedReason = `Company Name "${existingCompany.name}"`;
-      } else if (trimmedEmail && existingCompany.email?.toLowerCase() === trimmedEmail) {
-        matchedReason = `Email "${existingCompany.email}"`;
-      } else if (trimmedPhone && existingCompany.phone === trimmedPhone) {
-        matchedReason = `Phone "${existingCompany.phone}"`;
-      } else if (trimmedGstin && existingCompany.gstin?.toUpperCase() === trimmedGstin) {
-        matchedReason = `GSTIN "${existingCompany.gstin}"`;
+    if (localDuplicate) {
+      let matchedReason = `Company Name "${localDuplicate.name}"`;
+      if (trimmedEmail && localDuplicate.email?.toLowerCase() === trimmedEmail) matchedReason = `Email "${localDuplicate.email}"`;
+      else if (trimmedPhone && localDuplicate.phone === trimmedPhone) matchedReason = `Phone "${localDuplicate.phone}"`;
+
+      return res.status(409).json({
+        success: false,
+        message: `Company already exists in your workspace (${matchedReason}). Duplicate entry prevented.`,
+        existingCompany: localDuplicate,
+      });
+    }
+
+    // 2. GLOBAL Deduplication Check across ALL Workspaces
+    const globalDuplicate = await Company.findOne({ $or: orConditions });
+
+    if (globalDuplicate) {
+      let matchedField = "Name";
+      if (trimmedEmail && globalDuplicate.email?.toLowerCase() === trimmedEmail) matchedField = "Email";
+      else if (trimmedPhone && globalDuplicate.phone === trimmedPhone) matchedField = "Phone Number";
+
+      let ownerName = globalDuplicate.ownerManagerName;
+      let ownerEmail = globalDuplicate.ownerManagerEmail;
+
+      if (!ownerName && globalDuplicate.workspaceManagerId) {
+        try {
+          const clerkUser = await clerkClient.users.getUser(globalDuplicate.workspaceManagerId);
+          const fName = clerkUser?.firstName || "";
+          const lName = clerkUser?.lastName || "";
+          ownerName = `${fName} ${lName}`.trim() || clerkUser?.username || "Workspace Manager";
+          ownerEmail = clerkUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || "";
+        } catch (cErr) {}
       }
 
       return res.status(409).json({
         success: false,
-        message: `A similar company already exists in the shared database with ${matchedReason}. Duplicate entry prevented.`,
-        existingCompany,
+        isGlobalDuplicate: true,
+        message: `Company "${globalDuplicate.name}" already exists in the system under Manager ${ownerName || "another manager"}'s workspace (Matched by ${matchedField}). You can send an access request to view this company on your portal.`,
+        existingCompany: {
+          _id: globalDuplicate._id,
+          name: globalDuplicate.name,
+          industry: globalDuplicate.industry || "General",
+          phone: globalDuplicate.phone || "",
+          email: globalDuplicate.email || "",
+          ownerManagerId: globalDuplicate.workspaceManagerId || globalDuplicate.createdByClerkId,
+          ownerManagerName: ownerName || "Workspace Manager",
+          ownerManagerEmail: ownerEmail || "N/A",
+        },
       });
+    }
+
+    // Determine Owner Manager details for stamping
+    let ownerManagerName = req.user?.name || "Workspace Manager";
+    let ownerManagerEmail = req.user?.email || "";
+
+    if (req.user?.role === "employee" && workspaceManagerId) {
+      try {
+        const mgrUser = await clerkClient.users.getUser(workspaceManagerId);
+        const fName = mgrUser?.firstName || "";
+        const lName = mgrUser?.lastName || "";
+        ownerManagerName = `${fName} ${lName}`.trim() || mgrUser?.username || ownerManagerName;
+        ownerManagerEmail = mgrUser?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || ownerManagerEmail;
+      } catch (eErr) {}
     }
 
     const company = await Company.create({
@@ -93,6 +157,10 @@ export const createCompany = async (req, res, next) => {
       gstin: trimmedGstin || "",
       logoUrl: req.file?.path || undefined,
       createdByClerkId: req.user?.clerkId,
+      workspaceManagerId: workspaceManagerId,
+      ownerManagerName: ownerManagerName,
+      ownerManagerEmail: ownerManagerEmail,
+      sharedWithManagerIds: [],
     });
 
     res.status(201).json({ success: true, data: company });
@@ -101,14 +169,10 @@ export const createCompany = async (req, res, next) => {
   }
 };
 
-// @desc  Update company (Managers only - Employees read-only)
+// @desc  Update company (Workspace-scoped)
 // @route PUT /api/companies/:id
 export const updateCompany = async (req, res, next) => {
   try {
-    if (req.user?.role === "employee") {
-      return res.status(403).json({ success: false, message: "Employees have read-only access to company records." });
-    }
-
     const updateData = { ...req.body };
     if (req.file?.path) updateData.logoUrl = req.file.path;
 
@@ -117,7 +181,7 @@ export const updateCompany = async (req, res, next) => {
       new: true,
       runValidators: true,
     });
-    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+    if (!company) return res.status(404).json({ success: false, message: "Company not found in workspace" });
 
     res.status(200).json({ success: true, data: company });
   } catch (error) {
@@ -125,15 +189,13 @@ export const updateCompany = async (req, res, next) => {
   }
 };
 
+// @desc  Delete company (Managers only or workspace owner)
+// @route DELETE /api/companies/:id
 export const deleteCompany = async (req, res, next) => {
   try {
-    if (req.user?.role === "employee") {
-      return res.status(403).json({ success: false, message: "Employees have read-only access to company records." });
-    }
-
     const query = userFilter(req, { _id: req.params.id });
     const company = await Company.findOneAndDelete(query);
-    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+    if (!company) return res.status(404).json({ success: false, message: "Company not found in workspace" });
 
     res.status(200).json({ success: true, message: "Company deleted" });
   } catch (error) {
@@ -141,7 +203,8 @@ export const deleteCompany = async (req, res, next) => {
   }
 };
 
-
+// @desc  Export companies to CSV (Workspace-scoped)
+// @route GET /api/companies/export/csv
 export const exportCompaniesCSV = async (req, res, next) => {
   try {
     const query = userFilter(req);
@@ -170,18 +233,18 @@ export const exportCompaniesCSV = async (req, res, next) => {
   }
 };
 
-// @desc  Bulk import companies from CSV with Duplicate Skipping
+// @desc  Bulk import companies from CSV for current workspace
 // @route POST /api/companies/bulk
 export const importCompaniesBulk = async (req, res, next) => {
   try {
-    if (req.user?.role === "employee") {
-      return res.status(403).json({ success: false, message: "Employees have read-only access to company records." });
-    }
-
     const { companies } = req.body;
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ success: false, message: "No company data provided" });
     }
+
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+    let ownerManagerName = req.user?.name || "Workspace Manager";
+    let ownerManagerEmail = req.user?.email || "";
 
     const formatted = companies
       .map((c) => ({
@@ -197,6 +260,10 @@ export const importCompaniesBulk = async (req, res, next) => {
         notes: c.notes?.trim() || "",
         status: c.status || "Active",
         createdByClerkId: req.user?.clerkId,
+        workspaceManagerId: workspaceManagerId,
+        ownerManagerName: ownerManagerName,
+        ownerManagerEmail: ownerManagerEmail,
+        sharedWithManagerIds: [],
       }))
       .filter((c) => c.name);
 
@@ -204,7 +271,7 @@ export const importCompaniesBulk = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "No valid company records found" });
     }
 
-    // Fetch existing companies from shared DB to check for duplicates
+    // Fetch existing companies in system to check for duplicates
     const existingDbCompanies = await Company.find({}, "name email phone gstin").lean();
     const existingNames = new Set(existingDbCompanies.map((c) => c.name.toLowerCase().trim()));
     const existingEmails = new Set(existingDbCompanies.filter((c) => c.email).map((c) => c.email.toLowerCase().trim()));
@@ -229,7 +296,6 @@ export const importCompaniesBulk = async (req, res, next) => {
       if (isDup) {
         skippedDuplicates.push(c);
       } else {
-        // Track inserted items for intra-batch deduplication
         if (normName) existingNames.add(normName);
         if (normEmail) existingEmails.add(normEmail);
         if (normPhone) existingPhones.add(normPhone);
@@ -251,7 +317,7 @@ export const importCompaniesBulk = async (req, res, next) => {
       data: created,
       message:
         skippedDuplicates.length > 0
-          ? `Imported ${created.length} new companies. Skipped ${skippedDuplicates.length} duplicates already present in shared database.`
+          ? `Imported ${created.length} new companies. Skipped ${skippedDuplicates.length} duplicates already present in system.`
           : `Successfully imported ${created.length} companies.`,
     });
   } catch (error) {

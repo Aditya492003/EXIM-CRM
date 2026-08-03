@@ -19,6 +19,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import employeesRoutes from "./routes/employeesRoutes.js";
 import templatesRoutes from "./routes/templatesRoutes.js";
 import notificationsRoutes from "./routes/notificationsRoutes.js";
+import companyRequestsRoutes from "./routes/companyRequestsRoutes.js";
 
 import path from "path";
 
@@ -58,6 +59,7 @@ app.use("/api/dashboard",  dashboardRoutes);
 app.use("/api/employees",  employeesRoutes);
 app.use("/api/templates",  templatesRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/company-requests", companyRequestsRoutes);
 
 // 404 handler
 app.use((req, res) => {

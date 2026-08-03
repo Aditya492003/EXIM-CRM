@@ -67,6 +67,10 @@ const DealSchema = new Schema({
   createdByClerkId: {
     type: String
   },
+  workspaceManagerId: {
+    type: String,
+    index: true
+  },
   createdDate: {
     type: Date,
     default: Date.now

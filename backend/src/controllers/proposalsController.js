@@ -1,4 +1,5 @@
 import Proposal from "../models/Proposal.js";
+import Employee from "../models/Employee.js";
 import { sendProposalEmail } from "../config/email.js";
 
 // Helper: auto-generate 100% unique proposal number e.g. PRO-2026-001
@@ -17,9 +18,16 @@ const generateProposalNumber = async () => {
   return candidate;
 };
 
-// Helper: build user-scoped filter
+// Helper: build workspace-isolated filter
 const userFilter = (req, extra = {}) => {
+  const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+  const workspaceCond = [
+    { workspaceManagerId: workspaceManagerId },
+    { createdByClerkId: workspaceManagerId }
+  ];
+
   const filter = { ...extra };
+
   if (req.user?.role === "employee") {
     const empMatch = [];
     if (req.user.name) {
@@ -29,14 +37,19 @@ const userFilter = (req, extra = {}) => {
     if (req.user.clerkId) {
       empMatch.push({ createdByClerkId: req.user.clerkId });
     }
-    filter.$or = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+    const empCond = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+    filter.$and = [
+      { $or: workspaceCond },
+      { $or: empCond }
+    ];
   } else {
-    filter.createdByClerkId = req.user?.clerkId;
+    filter.$or = workspaceCond;
   }
+
   return filter;
 };
 
-// @desc  Get all proposals (scoped per role)
+// @desc  Get all proposals (Workspace-scoped)
 // @route GET /api/proposals
 export const getProposals = async (req, res, next) => {
   try {
@@ -47,12 +60,20 @@ export const getProposals = async (req, res, next) => {
     if (client) filter.client = { $regex: client, $options: "i" };
 
     if (search) {
-      filter.$or = [
+      const searchCond = [
         { number: { $regex: search, $options: "i" } },
         { client: { $regex: search, $options: "i" } },
         { service: { $regex: search, $options: "i" } },
         { title: { $regex: search, $options: "i" } },
       ];
+      if (filter.$and) {
+        filter.$and.push({ $or: searchCond });
+      } else if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchCond }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchCond;
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -67,7 +88,7 @@ export const getProposals = async (req, res, next) => {
   }
 };
 
-// @desc  Get single proposal
+// @desc  Get single proposal (Workspace-scoped)
 // @route GET /api/proposals/:id
 export const getProposal = async (req, res, next) => {
   try {
@@ -81,13 +102,14 @@ export const getProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Create proposal & send proposal email
+// @desc  Create proposal & send proposal email (Stamps workspaceManagerId)
 // @route POST /api/proposals
 export const createProposal = async (req, res, next) => {
   try {
     const number = await generateProposalNumber();
     const status = req.body.status || "Sent";
     const recipientEmail = (req.body.clientEmail || req.body.email || "").trim();
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
 
     const proposal = await Proposal.create({
       title: req.body.title,
@@ -101,6 +123,7 @@ export const createProposal = async (req, res, next) => {
       attachmentUrl: req.file?.path || req.body.attachmentUrl || undefined,
       number,
       createdByClerkId: req.user?.clerkId,
+      workspaceManagerId: workspaceManagerId,
       sentDate: status === "Sent" ? new Date() : undefined,
     });
 
@@ -211,7 +234,7 @@ export const sendProposalDirectEmail = async (req, res, next) => {
   }
 };
 
-// @desc  Update proposal
+// @desc  Update proposal (Workspace-scoped)
 // @route PUT /api/proposals/:id
 export const updateProposal = async (req, res, next) => {
   try {
@@ -232,7 +255,7 @@ export const updateProposal = async (req, res, next) => {
   }
 };
 
-// @desc  Update proposal status only
+// @desc  Update proposal status only (Workspace-scoped)
 // @route PATCH /api/proposals/:id/status
 export const updateProposalStatus = async (req, res, next) => {
   try {
@@ -257,7 +280,7 @@ export const updateProposalStatus = async (req, res, next) => {
   }
 };
 
-// @desc  Delete proposal
+// @desc  Delete proposal (Workspace-scoped)
 // @route DELETE /api/proposals/:id
 export const deleteProposal = async (req, res, next) => {
   try {

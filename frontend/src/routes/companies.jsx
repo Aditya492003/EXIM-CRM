@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { AddContactModal } from "./contacts";
 import { AddLeadModal } from "./leads";
 import { AddDealModal } from "./deals";
-import { Handshake, Sparkles, Target } from "lucide-react";
+import { Handshake, Sparkles, Target, Send } from "lucide-react";
 
 export const Route = createFileRoute("/companies")({
   component: CompaniesPage,
@@ -694,22 +694,50 @@ function AddCompanyModal({ existingCompanies = [], onClose, onSuccess }) {
   const [csvRows, setCsvRows] = useState([]); // parsed company records
   const [parsing, setParsing] = useState(false);
 
+  // Global Duplicate State
+  const [globalDuplicateData, setGlobalDuplicateData] = useState(null);
+  const [requestingAccess, setRequestingAccess] = useState(false);
+
+  const handleSendAccessRequest = async () => {
+    if (!globalDuplicateData?._id) return;
+    try {
+      setRequestingAccess(true);
+      const res = await api.post("/company-requests", {
+        companyId: globalDuplicateData._id,
+        reason: "Requesting access to existing company record for workspace collaboration.",
+      });
+      toast.success(res.data?.message || `Access request sent to Manager ${globalDuplicateData.ownerManagerName || ""}`);
+      setGlobalDuplicateData(null);
+      onClose();
+    } catch (err) {
+      console.error("Access request error:", err);
+      toast.error(err.response?.data?.message || "Failed to send access request");
+    } finally {
+      setRequestingAccess(false);
+    }
+  };
+
   const handleManualSubmit = async (e) => {
     e.preventDefault();
     if (manualDuplicateMatch) {
-      toast.error(`Company "${manualDuplicateMatch.name}" already exists in shared DB`);
+      toast.error(`Company "${manualDuplicateMatch.name}" already exists in your workspace`);
       return;
     }
 
     try {
       setSubmitting(true);
+      setGlobalDuplicateData(null);
       await api.post("/companies", formData);
       toast.success("Company created successfully");
       onSuccess?.();
       onClose();
     } catch (err) {
       console.error("Create company error", err);
-      toast.error(err.response?.data?.message || "Failed to create company");
+      if (err.response?.data?.isGlobalDuplicate && err.response?.data?.existingCompany) {
+        setGlobalDuplicateData(err.response.data.existingCompany);
+      } else {
+        toast.error(err.response?.data?.message || "Failed to create company");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -903,27 +931,75 @@ function AddCompanyModal({ existingCompanies = [], onClose, onSuccess }) {
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
 
-        {/* Tab Headers */}
-        <div className="mt-4 flex border-b border-border text-xs font-semibold">
-          <button
-            onClick={() => setTab("manual")}
-            className={cn(
-              "px-4 py-2.5 border-b-2 transition cursor-pointer flex items-center gap-2",
-              tab === "manual" ? "border-indigo-600 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Building2 size={15} /> Manual Entry
-          </button>
-          <button
-            onClick={() => setTab("import")}
-            className={cn(
-              "px-4 py-2.5 border-b-2 transition cursor-pointer flex items-center gap-2",
-              tab === "import" ? "border-indigo-600 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <FileSpreadsheet size={15} /> Import CSV Workflow
-          </button>
-        </div>
+        {/* Global Duplicate Detection Card */}
+        {globalDuplicateData ? (
+          <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50/90 p-5 dark:border-amber-900/50 dark:bg-amber-950/40 space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white font-bold">
+                <Building2 size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-amber-950 dark:text-amber-200">
+                  Company Already Exists in Database!
+                </h3>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                  Company "<strong>{globalDuplicateData.name}</strong>" is already registered under Manager <strong>{globalDuplicateData.ownerManagerName || "Workspace Manager"}</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white/90 dark:bg-slate-900/90 p-3.5 text-xs space-y-1.5 border border-amber-200 shadow-sm">
+              <div><strong>Company Name:</strong> {globalDuplicateData.name}</div>
+              <div><strong>Industry:</strong> {globalDuplicateData.industry || "General"}</div>
+              {globalDuplicateData.phone && <div><strong>Phone:</strong> {globalDuplicateData.phone}</div>}
+              {globalDuplicateData.email && <div><strong>Email:</strong> {globalDuplicateData.email}</div>}
+              <div className="pt-2 text-indigo-700 font-bold border-t border-amber-200/60 dark:text-indigo-300 flex items-center justify-between">
+                <span>Created by Manager:</span>
+                <span>{globalDuplicateData.ownerManagerName} ({globalDuplicateData.ownerManagerEmail || "N/A"})</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200">
+              <button
+                type="button"
+                onClick={() => setGlobalDuplicateData(null)}
+                className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendAccessRequest}
+                disabled={requestingAccess}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-2 text-xs font-extrabold text-white shadow-md hover:shadow-lg transition cursor-pointer disabled:opacity-50"
+              >
+                {requestingAccess ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Request Access to {globalDuplicateData.name}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Tab Headers */}
+            <div className="mt-4 flex border-b border-border text-xs font-semibold">
+              <button
+                onClick={() => setTab("manual")}
+                className={cn(
+                  "px-4 py-2.5 border-b-2 transition cursor-pointer flex items-center gap-2",
+                  tab === "manual" ? "border-indigo-600 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Building2 size={15} /> Manual Entry
+              </button>
+              <button
+                onClick={() => setTab("import")}
+                className={cn(
+                  "px-4 py-2.5 border-b-2 transition cursor-pointer flex items-center gap-2",
+                  tab === "import" ? "border-indigo-600 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <FileSpreadsheet size={15} /> Import CSV Workflow
+              </button>
+            </div>
 
         {/* Tab 1: Manual Entry */}
         {tab === "manual" && (
@@ -1180,6 +1256,8 @@ function AddCompanyModal({ existingCompanies = [], onClose, onSuccess }) {
               </div>
             )}
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

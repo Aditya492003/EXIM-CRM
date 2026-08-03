@@ -1,8 +1,15 @@
 import Deal from "../models/Deal.js";
 
-// Helper: build user-scoped filter
+// Helper: build workspace-isolated filter
 const userFilter = (req, extra = {}) => {
+  const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+  const workspaceCond = [
+    { workspaceManagerId: workspaceManagerId },
+    { createdByClerkId: workspaceManagerId }
+  ];
+
   const filter = { ...extra };
+
   if (req.user?.role === "employee") {
     const empMatch = [];
     if (req.user.name) {
@@ -11,15 +18,21 @@ const userFilter = (req, extra = {}) => {
     }
     if (req.user.clerkId) {
       empMatch.push({ assignedToClerkId: req.user.clerkId });
+      empMatch.push({ createdByClerkId: req.user.clerkId });
     }
-    filter.$or = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+    const empCond = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+    filter.$and = [
+      { $or: workspaceCond },
+      { $or: empCond }
+    ];
   } else {
-    filter.createdByClerkId = req.user?.clerkId;
+    filter.$or = workspaceCond;
   }
+
   return filter;
 };
 
-// @desc  Get user's deals (Private to user - Deals are not shared across users)
+// @desc  Get workspace deals
 // @route GET /api/deals
 export const getDeals = async (req, res, next) => {
   try {
@@ -28,14 +41,21 @@ export const getDeals = async (req, res, next) => {
 
     if (stage && stage !== "All") filter.stage = stage;
     if (priority && priority !== "All") filter.priority = priority;
-    // Only apply assignedTo query filter for managers
     if (assignedTo && assignedTo !== "All" && req.user?.role !== "employee") filter.assignedTo = { $regex: assignedTo, $options: "i" };
 
     if (search) {
-      filter.$or = [
+      const searchCond = [
         { name: { $regex: search, $options: "i" } },
         { company: { $regex: search, $options: "i" } },
       ];
+      if (filter.$and) {
+        filter.$and.push({ $or: searchCond });
+      } else if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchCond }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchCond;
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -50,7 +70,7 @@ export const getDeals = async (req, res, next) => {
   }
 };
 
-// @desc  Get single deal (User-scoped)
+// @desc  Get single deal (Workspace-scoped)
 // @route GET /api/deals/:id
 export const getDeal = async (req, res, next) => {
   try {
@@ -64,13 +84,15 @@ export const getDeal = async (req, res, next) => {
   }
 };
 
-// @desc  Create deal (Stamped with user's clerkId)
+// @desc  Create deal (Stamps workspaceManagerId)
 // @route POST /api/deals
 export const createDeal = async (req, res, next) => {
   try {
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
     const deal = await Deal.create({
       ...req.body,
       createdByClerkId: req.user?.clerkId,
+      workspaceManagerId: workspaceManagerId,
     });
 
     res.status(201).json({ success: true, data: deal });
@@ -79,7 +101,7 @@ export const createDeal = async (req, res, next) => {
   }
 };
 
-// @desc  Update deal (full update)
+// @desc  Update deal (Workspace-scoped)
 // @route PUT /api/deals/:id
 export const updateDeal = async (req, res, next) => {
   try {
@@ -96,7 +118,7 @@ export const updateDeal = async (req, res, next) => {
   }
 };
 
-// @desc  Update deal stage only (inline stage dropdown / Kanban drag drop)
+// @desc  Update deal stage only
 // @route PATCH /api/deals/:id/stage
 export const updateDealStage = async (req, res, next) => {
   try {
@@ -108,7 +130,6 @@ export const updateDealStage = async (req, res, next) => {
 
     const updateData = { stage };
 
-    // Auto-set closedDate when deal is Won or Lost
     if (stage === "Won" || stage === "Lost") {
       updateData.closedDate = new Date();
     } else {
@@ -128,7 +149,7 @@ export const updateDealStage = async (req, res, next) => {
   }
 };
 
-// @desc  Delete deal
+// @desc  Delete deal (Workspace-scoped)
 // @route DELETE /api/deals/:id
 export const deleteDeal = async (req, res, next) => {
   try {
@@ -142,7 +163,7 @@ export const deleteDeal = async (req, res, next) => {
   }
 };
 
-// @desc  Update deal notes/expected close (Employee can update on their assigned deals)
+// @desc  Update deal notes/expected close
 // @route PATCH /api/deals/:id/notes
 export const updateDealNotes = async (req, res, next) => {
   try {

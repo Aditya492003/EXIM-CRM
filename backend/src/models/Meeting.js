@@ -74,6 +74,10 @@ const MeetingSchema = new Schema({
     type: String,
     default: ''
   },
+  workspaceManagerId: {
+    type: String,
+    index: true
+  },
   createdDate: {
     type: Date,
     default: Date.now

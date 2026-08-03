@@ -11,6 +11,7 @@ import {
   Sparkles,
   UserCheck,
   Users,
+  ShieldCheck,
   Video,
   UserPlus,
 } from "lucide-react";
@@ -36,6 +37,7 @@ const navSections = [
     items: [
       { to: "/companies", label: "Companies", icon: Building2 },
       { to: "/contacts", label: "Contacts", icon: UserCheck },
+      { to: "/company-requests", label: "Company Requests", icon: ShieldCheck },
     ],
   },
   {

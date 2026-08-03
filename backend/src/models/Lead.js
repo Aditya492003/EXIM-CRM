@@ -108,6 +108,10 @@ const LeadSchema = new Schema({
   },
   createdByClerkId: {
     type: String
+  },
+  workspaceManagerId: {
+    type: String,
+    index: true
   }
 });
 

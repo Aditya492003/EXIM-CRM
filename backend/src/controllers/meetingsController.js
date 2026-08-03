@@ -1,21 +1,28 @@
 import Meeting from "../models/Meeting.js";
 
-// @desc  Get all meetings (Manager-scoped — only meetings organized by current user)
+// Helper: build workspace-isolated filter
+const userFilter = (req, extra = {}) => {
+  const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+  return {
+    ...extra,
+    $or: [
+      { workspaceManagerId: workspaceManagerId },
+      { organizedByClerkId: workspaceManagerId },
+      { organizedByClerkId: { $exists: false } },
+      { organizedByClerkId: null },
+    ]
+  };
+};
+
+// @desc  Get workspace meetings
 // @route GET /api/meetings
 export const getMeetings = async (req, res, next) => {
   try {
     const { status, company, search, date, page = 1, limit = 50 } = req.query;
-    const filter = {};
+    const filter = userFilter(req);
 
     if (req.user?.role === "employee") {
       filter.assignedToClerkId = req.user?.clerkId;
-    } else if (req.user?.clerkId) {
-      filter.$or = [
-        { organizedByClerkId: req.user.clerkId },
-        { organizedByClerkId: { $exists: false } },
-        { organizedByClerkId: null },
-        { organizedByClerkId: "" },
-      ];
     }
 
     if (status) filter.status = status;
@@ -30,24 +37,16 @@ export const getMeetings = async (req, res, next) => {
 
     if (search) {
       const searchRegex = { $regex: search, $options: "i" };
+      const searchCond = [
+        { title: searchRegex },
+        { company: searchRegex },
+        { attendee: searchRegex },
+      ];
       if (filter.$or) {
-        filter.$and = [
-          { $or: filter.$or },
-          {
-            $or: [
-              { title: searchRegex },
-              { company: searchRegex },
-              { attendee: searchRegex },
-            ],
-          },
-        ];
+        filter.$and = [{ $or: filter.$or }, { $or: searchCond }];
         delete filter.$or;
       } else {
-        filter.$or = [
-          { title: searchRegex },
-          { company: searchRegex },
-          { attendee: searchRegex },
-        ];
+        filter.$or = searchCond;
       }
     }
 
@@ -68,16 +67,22 @@ export const getMeetings = async (req, res, next) => {
 export const getEmployeeMeetings = async (req, res, next) => {
   try {
     const { status, search, page = 1, limit = 50 } = req.query;
-    const filter = { assignedToClerkId: req.user?.clerkId };
+    const filter = userFilter(req, { assignedToClerkId: req.user?.clerkId });
 
     if (status) filter.status = status;
 
     if (search) {
-      filter.$or = [
+      const searchCond = [
         { title: { $regex: search, $options: "i" } },
         { company: { $regex: search, $options: "i" } },
         { attendee: { $regex: search, $options: "i" } },
       ];
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchCond }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchCond;
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -92,11 +97,12 @@ export const getEmployeeMeetings = async (req, res, next) => {
   }
 };
 
-// @desc  Get single meeting (User-scoped)
+// @desc  Get single meeting (Workspace-scoped)
 // @route GET /api/meetings/:id
 export const getMeeting = async (req, res, next) => {
   try {
-    const meeting = await Meeting.findOne({ _id: req.params.id, organizedByClerkId: req.user?.clerkId });
+    const query = userFilter(req, { _id: req.params.id });
+    const meeting = await Meeting.findOne(query);
     if (!meeting) return res.status(404).json({ success: false, message: "Meeting not found" });
 
     res.status(200).json({ success: true, data: meeting });
@@ -105,13 +111,15 @@ export const getMeeting = async (req, res, next) => {
   }
 };
 
-// @desc  Create meeting (stamped with clerkId)
+// @desc  Create meeting (Stamps workspaceManagerId)
 // @route POST /api/meetings
 export const createMeeting = async (req, res, next) => {
   try {
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
     const meeting = await Meeting.create({
       ...req.body,
       organizedByClerkId: req.user?.clerkId,
+      workspaceManagerId: workspaceManagerId,
     });
 
     res.status(201).json({ success: true, data: meeting });
@@ -120,15 +128,15 @@ export const createMeeting = async (req, res, next) => {
   }
 };
 
-// @desc  Update meeting (User-scoped)
+// @desc  Update meeting (Workspace-scoped)
 // @route PUT /api/meetings/:id
 export const updateMeeting = async (req, res, next) => {
   try {
-    const meeting = await Meeting.findOneAndUpdate(
-      { _id: req.params.id, organizedByClerkId: req.user?.clerkId },
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const query = userFilter(req, { _id: req.params.id });
+    const meeting = await Meeting.findOneAndUpdate(query, req.body, {
+      new: true,
+      runValidators: true,
+    });
     if (!meeting) return res.status(404).json({ success: false, message: "Meeting not found" });
 
     res.status(200).json({ success: true, data: meeting });
@@ -137,15 +145,16 @@ export const updateMeeting = async (req, res, next) => {
   }
 };
 
-// @desc  Update meeting status only (User-scoped)
+// @desc  Update meeting status only (Workspace-scoped)
 // @route PATCH /api/meetings/:id/status
 export const updateMeetingStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
     if (!status) return res.status(400).json({ success: false, message: "Status is required" });
 
+    const query = userFilter(req, { _id: req.params.id });
     const meeting = await Meeting.findOneAndUpdate(
-      { _id: req.params.id, organizedByClerkId: req.user?.clerkId },
+      query,
       { status },
       { new: true, runValidators: true }
     );
@@ -157,7 +166,7 @@ export const updateMeetingStatus = async (req, res, next) => {
   }
 };
 
-// @desc  Update meeting outcome (Employee-scoped — only assigned employee can update)
+// @desc  Update meeting outcome (Employee-scoped)
 // @route PATCH /api/meetings/:id/outcome
 export const updateMeetingOutcome = async (req, res, next) => {
   try {
@@ -167,9 +176,9 @@ export const updateMeetingOutcome = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "outcomeStatus is required" });
     }
 
-    // Scope to the assigned employee
+    const query = userFilter(req, { _id: req.params.id, assignedToClerkId: req.user?.clerkId });
     const meeting = await Meeting.findOneAndUpdate(
-      { _id: req.params.id, assignedToClerkId: req.user?.clerkId },
+      query,
       { outcomeStatus, outcomeNotes: outcomeNotes || "" },
       { new: true, runValidators: true }
     );
@@ -184,11 +193,12 @@ export const updateMeetingOutcome = async (req, res, next) => {
   }
 };
 
-// @desc  Delete meeting (User-scoped)
+// @desc  Delete meeting (Workspace-scoped)
 // @route DELETE /api/meetings/:id
 export const deleteMeeting = async (req, res, next) => {
   try {
-    const meeting = await Meeting.findOneAndDelete({ _id: req.params.id, organizedByClerkId: req.user?.clerkId });
+    const query = userFilter(req, { _id: req.params.id });
+    const meeting = await Meeting.findOneAndDelete(query);
     if (!meeting) return res.status(404).json({ success: false, message: "Meeting not found" });
 
     res.status(200).json({ success: true, message: "Meeting deleted" });

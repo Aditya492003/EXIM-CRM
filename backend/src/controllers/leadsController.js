@@ -1,8 +1,15 @@
 import Lead from "../models/Lead.js";
 
-// Helper: build user-scoped filter
+// Helper: build workspace-isolated filter
 const userFilter = (req, extra = {}) => {
+  const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+  const workspaceCond = [
+    { workspaceManagerId: workspaceManagerId },
+    { createdByClerkId: workspaceManagerId }
+  ];
+
   const filter = { ...extra };
+
   if (req.user?.role === "employee") {
     const empMatch = [];
     if (req.user.name) {
@@ -11,15 +18,21 @@ const userFilter = (req, extra = {}) => {
     }
     if (req.user.clerkId) {
       empMatch.push({ assignedToClerkId: req.user.clerkId });
+      empMatch.push({ createdByClerkId: req.user.clerkId });
     }
-    filter.$or = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+    const empCond = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
+    filter.$and = [
+      { $or: workspaceCond },
+      { $or: empCond }
+    ];
   } else {
-    filter.createdByClerkId = req.user?.clerkId;
+    filter.$or = workspaceCond;
   }
+
   return filter;
 };
 
-// @desc  Get all leads (User-scoped — only current user's leads)
+// @desc  Get all leads (Workspace-scoped)
 // @route GET /api/leads
 export const getLeads = async (req, res, next) => {
   try {
@@ -29,17 +42,24 @@ export const getLeads = async (req, res, next) => {
     if (status) filter.status = status;
     if (source) filter.source = source;
     if (service) filter.service = { $regex: service, $options: "i" };
-    // Only apply assignedTo query filter for managers (employees already scoped by userFilter)
     if (assignedTo && req.user?.role !== "employee") filter.assignedTo = { $regex: assignedTo, $options: "i" };
     if (isFavorite === "true") filter.isFavorite = true;
 
     if (search) {
-      filter.$or = [
+      const searchCond = [
         { name: { $regex: search, $options: "i" } },
         { company: { $regex: search, $options: "i" } },
         { email: { $regex: search, $options: "i" } },
         { phone: { $regex: search, $options: "i" } },
       ];
+      if (filter.$and) {
+        filter.$and.push({ $or: searchCond });
+      } else if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { $or: searchCond }];
+        delete filter.$or;
+      } else {
+        filter.$or = searchCond;
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -54,7 +74,7 @@ export const getLeads = async (req, res, next) => {
   }
 };
 
-// @desc  Get single lead (User-scoped)
+// @desc  Get single lead (Workspace-scoped)
 // @route GET /api/leads/:id
 export const getLead = async (req, res, next) => {
   try {
@@ -68,13 +88,15 @@ export const getLead = async (req, res, next) => {
   }
 };
 
-// @desc  Create lead (stamped with clerkId)
+// @desc  Create lead (Stamps workspaceManagerId)
 // @route POST /api/leads
 export const createLead = async (req, res, next) => {
   try {
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
     const lead = await Lead.create({
       ...req.body,
       createdByClerkId: req.user?.clerkId,
+      workspaceManagerId: workspaceManagerId,
     });
 
     res.status(201).json({ success: true, data: lead });
@@ -83,7 +105,7 @@ export const createLead = async (req, res, next) => {
   }
 };
 
-// @desc  Update lead (User-scoped)
+// @desc  Update lead (Workspace-scoped)
 // @route PUT /api/leads/:id
 export const updateLead = async (req, res, next) => {
   try {
@@ -101,7 +123,7 @@ export const updateLead = async (req, res, next) => {
   }
 };
 
-// @desc  Update lead status only (User-scoped)
+// @desc  Update lead status only (Workspace-scoped)
 // @route PATCH /api/leads/:id/status
 export const updateLeadStatus = async (req, res, next) => {
   try {
@@ -114,7 +136,7 @@ export const updateLeadStatus = async (req, res, next) => {
       { status },
       { new: true, runValidators: true }
     );
-    if (!lead) return res.status(404).json({ success: false, message: "Lead not found or you don't have access" });
+    if (!lead) return res.status(404).json({ success: false, message: "Lead not found or access denied" });
 
     res.status(200).json({ success: true, data: lead });
   } catch (error) {
@@ -122,7 +144,7 @@ export const updateLeadStatus = async (req, res, next) => {
   }
 };
 
-// @desc  Update lead notes/follow-up by employee (their assigned lead)
+// @desc  Update lead notes/follow-up
 // @route PATCH /api/leads/:id/notes
 export const updateLeadNotes = async (req, res, next) => {
   try {
@@ -134,7 +156,7 @@ export const updateLeadNotes = async (req, res, next) => {
     if (lastContacted !== undefined) updateData.lastContacted = lastContacted;
 
     const lead = await Lead.findOneAndUpdate(query, updateData, { new: true });
-    if (!lead) return res.status(404).json({ success: false, message: "Lead not found or you don't have access" });
+    if (!lead) return res.status(404).json({ success: false, message: "Lead not found or access denied" });
 
     res.status(200).json({ success: true, data: lead });
   } catch (error) {
@@ -142,7 +164,7 @@ export const updateLeadNotes = async (req, res, next) => {
   }
 };
 
-// @desc  Toggle lead favorite (User-scoped)
+// @desc  Toggle lead favorite
 // @route PATCH /api/leads/:id/favorite
 export const toggleFavorite = async (req, res, next) => {
   try {
@@ -159,7 +181,7 @@ export const toggleFavorite = async (req, res, next) => {
   }
 };
 
-// @desc  Delete lead (User-scoped)
+// @desc  Delete lead (Workspace-scoped)
 // @route DELETE /api/leads/:id
 export const deleteLead = async (req, res, next) => {
   try {
@@ -173,7 +195,7 @@ export const deleteLead = async (req, res, next) => {
   }
 };
 
-// @desc  Export user's own leads as CSV
+// @desc  Export workspace leads as CSV
 // @route GET /api/leads/export/csv
 export const exportLeadsCSV = async (req, res, next) => {
   try {

@@ -59,6 +59,17 @@ const EmployeeSchema = new Schema({
     type: String,
     trim: true,
   },
+  managerClerkId: {
+    type: String,
+    index: true,
+  },
+  invitedBy: {
+    type: String,
+  },
+  joinedAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const Employee = mongoose.model('Employee', EmployeeSchema);

@@ -1,31 +1,91 @@
 import Employee from "../models/Employee.js";
+import Lead from "../models/Lead.js";
+import Deal from "../models/Deal.js";
+import Proposal from "../models/Proposal.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
 
-// @desc  Get all employees
+// @desc  Get team members belonging to the current logged-in manager (with assigned work counts)
 // @route GET /api/employees
 export const getEmployees = async (req, res, next) => {
   try {
     const { search, status, department, role } = req.query;
-    const filter = {};
+    const managerClerkId = req.user?.clerkId;
+
+    const filter = {
+      $or: [
+        { managerClerkId: managerClerkId },
+        { invitedBy: managerClerkId },
+        { createdByClerkId: managerClerkId }
+      ]
+    };
 
     if (status && status !== "All") filter.status = status;
     if (department && department !== "All") filter.department = department;
     if (role && role !== "All") filter.role = role;
 
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { role: { $regex: search, $options: "i" } },
+      filter.$and = [
+        {
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { role: { $regex: search, $options: "i" } },
+          ]
+        }
       ];
     }
 
-    const employees = await Employee.find(filter).sort({ joinedDate: -1 });
+    const employees = await Employee.find(filter).sort({ joinedDate: -1, joinedAt: -1 }).lean();
+
+    // Calculate assigned work count stats (leads, deals, proposals) per employee
+    const employeesWithStats = await Promise.all(
+      employees.map(async (emp) => {
+        const empName = emp.name;
+        const empClerkId = emp.clerkUserId;
+
+        const empNameRegex = empName
+          ? new RegExp(`^${empName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i")
+          : null;
+
+        const leadQuery = {
+          $or: [
+            ...(empNameRegex ? [{ assignedTo: empNameRegex }] : []),
+            ...(empClerkId ? [{ assignedToClerkId: empClerkId }, { createdByClerkId: empClerkId }] : [])
+          ]
+        };
+        const dealQuery = {
+          $or: [
+            ...(empNameRegex ? [{ assignedTo: empNameRegex }] : []),
+            ...(empClerkId ? [{ assignedToClerkId: empClerkId }, { createdByClerkId: empClerkId }] : [])
+          ]
+        };
+        const proposalQuery = {
+          $or: [
+            ...(empNameRegex ? [{ assignedTo: empNameRegex }] : []),
+            ...(empClerkId ? [{ createdByClerkId: empClerkId }] : [])
+          ]
+        };
+
+        const [leadsCount, dealsCount, proposalsCount] = await Promise.all([
+          Lead.countDocuments(leadQuery),
+          Deal.countDocuments(dealQuery),
+          Proposal.countDocuments(proposalQuery),
+        ]);
+
+        return {
+          ...emp,
+          leadsCount,
+          dealsCount,
+          proposalsCount,
+          totalAssignedWork: leadsCount + dealsCount + proposalsCount,
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
-      count: employees.length,
-      data: employees,
+      count: employeesWithStats.length,
+      data: employeesWithStats,
     });
   } catch (error) {
     next(error);
@@ -47,44 +107,80 @@ export const getEmployee = async (req, res, next) => {
   }
 };
 
-// @desc  Invite a new employee (Creates DB Record + Clerk Invitation)
+// @desc  Invite a new employee via Clerk Invitation only
 // @route POST /api/employees/invite
 export const inviteEmployee = async (req, res, next) => {
   try {
     const { name, email, phone, role, department, designation } = req.body;
+    const managerClerkId = req.user?.clerkId || req.auth?.userId;
 
     if (!name || !email) {
       return res.status(400).json({ success: false, message: "Name and email are required" });
     }
 
-    // 1. Create DB Record first (without clerkUserId initially)
-    const employee = await Employee.create({
-      name,
-      email: email.toLowerCase(),
-      phone,
-      role: role || designation || "Trade Consultant",
-      department: department || "Sales",
-      status: "Active",
-      workingStatus: "Available",
-      joinedDate: Date.now(),
-      createdByClerkId: req.auth?.userId || "system",
-    });
+    const normalizedEmail = email.toLowerCase().trim();
 
-    // 2. Create Clerk Invitation
-    const invitation = await clerkClient.invitations.createInvitation({
-      emailAddress: email.toLowerCase(),
-      publicMetadata: {
-        employeeId: employee._id.toString(),
-        role: "employee",
-      },
-      redirectUrl: process.env.CLIENT_URL || "http://localhost:5173",
-    });
+    // Check if employee already exists in DB
+    let employee = await Employee.findOne({ email: normalizedEmail });
 
-    res.status(201).json({ 
+    if (employee) {
+      // If employee belongs to another manager team
+      if (employee.managerClerkId && employee.managerClerkId !== managerClerkId) {
+        return res.status(400).json({
+          success: false,
+          message: `An employee with email ${normalizedEmail} is already assigned to another manager's team.`,
+        });
+      }
+
+      // Update existing record for current manager team
+      employee.name = name.trim();
+      if (phone) employee.phone = phone;
+      if (role || designation) employee.role = role || designation;
+      if (department) employee.department = department;
+      employee.managerClerkId = managerClerkId;
+      employee.invitedBy = managerClerkId;
+      await employee.save();
+    } else {
+      // 1. Create DB Record linked permanently to managerClerkId
+      employee = await Employee.create({
+        name: name.trim(),
+        email: normalizedEmail,
+        phone: phone || "",
+        role: role || designation || "Trade Consultant",
+        department: department || "Sales",
+        status: "Active",
+        workingStatus: "Available",
+        joinedDate: Date.now(),
+        joinedAt: Date.now(),
+        managerClerkId: managerClerkId,
+        invitedBy: managerClerkId,
+        createdByClerkId: managerClerkId,
+      });
+    }
+
+    // 2. Create Clerk Invitation (Clerk handles sending the official invitation email)
+    let invitationId = null;
+    try {
+      const invitation = await clerkClient.invitations.createInvitation({
+        emailAddress: normalizedEmail,
+        publicMetadata: {
+          employeeId: employee._id.toString(),
+          managerClerkId: managerClerkId,
+          invitedBy: managerClerkId,
+          role: "employee",
+        },
+        redirectUrl: process.env.CLIENT_URL || "http://localhost:5173",
+      });
+      invitationId = invitation.id;
+    } catch (cErr) {
+      console.warn("Clerk invitation dispatch warning:", cErr.message);
+    }
+
+    res.status(200).json({ 
       success: true, 
-      message: "Employee invited successfully",
+      message: "Invite sent successfully",
       data: employee,
-      invitationId: invitation.id 
+      invitationId: invitationId,
     });
   } catch (error) {
     console.error("Invite error:", error);
@@ -106,17 +202,24 @@ export const syncEmployee = async (req, res, next) => {
         const user = await clerkClient.users.getUser(userId);
         const userEmail = user?.emailAddresses?.[0]?.emailAddress?.toLowerCase();
         const employeeIdFromMeta = user?.publicMetadata?.employeeId;
+        const managerClerkIdFromMeta = user?.publicMetadata?.managerClerkId || user?.publicMetadata?.invitedBy;
+
+        const updatePayload = {
+          clerkUserId: userId,
+          lastLogin: Date.now(),
+          ...(managerClerkIdFromMeta ? { managerClerkId: managerClerkIdFromMeta } : {}),
+        };
 
         if (employeeIdFromMeta) {
           employee = await Employee.findByIdAndUpdate(
             employeeIdFromMeta,
-            { clerkUserId: userId, lastLogin: Date.now() },
+            updatePayload,
             { new: true }
           );
         } else if (userEmail) {
           employee = await Employee.findOneAndUpdate(
             { email: userEmail },
-            { clerkUserId: userId, lastLogin: Date.now() },
+            updatePayload,
             { new: true }
           );
         }
@@ -222,7 +325,7 @@ export const updateEmployee = async (req, res, next) => {
   }
 };
 
-// @desc  Delete employee
+// @desc  Remove employee from team / delete
 // @route DELETE /api/employees/:id
 export const deleteEmployee = async (req, res, next) => {
   try {
@@ -231,7 +334,7 @@ export const deleteEmployee = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Employee not found" });
     }
 
-    res.status(200).json({ success: true, message: "Employee deleted successfully" });
+    res.status(200).json({ success: true, message: "Employee removed from your team successfully" });
   } catch (error) {
     next(error);
   }

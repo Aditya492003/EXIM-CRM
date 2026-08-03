@@ -19,6 +19,10 @@ const NotificationSchema = new mongoose.Schema({
   senderClerkId: {
     type: String,
   },
+  workspaceManagerId: {
+    type: String,
+    index: true,
+  },
   note: {
     type: String,
     required: true,

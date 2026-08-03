@@ -37,19 +37,26 @@ const requireAuth = async (req, res, next) => {
 
                 if (!employee) {
                     const employeeIdFromMeta = clerkUser?.publicMetadata?.employeeId;
+                    const managerClerkIdFromMeta = clerkUser?.publicMetadata?.managerClerkId || clerkUser?.publicMetadata?.invitedBy;
 
                     if (employeeIdFromMeta) {
                         employee = await Employee.findByIdAndUpdate(
                             employeeIdFromMeta,
-                            { clerkUserId: payload.sub },
+                            { clerkUserId: payload.sub, ...(managerClerkIdFromMeta ? { managerClerkId: managerClerkIdFromMeta } : {}) },
                             { returnDocument: 'after' }
                         );
                     } else if (userEmail) {
                         employee = await Employee.findOneAndUpdate(
                             { email: userEmail },
-                            { clerkUserId: payload.sub },
+                            { clerkUserId: payload.sub, ...(managerClerkIdFromMeta ? { managerClerkId: managerClerkIdFromMeta } : {}) },
                             { returnDocument: 'after' }
                         );
+                    }
+                } else if (!employee.managerClerkId) {
+                    const managerClerkIdFromMeta = clerkUser?.publicMetadata?.managerClerkId || clerkUser?.publicMetadata?.invitedBy;
+                    if (managerClerkIdFromMeta) {
+                        employee.managerClerkId = managerClerkIdFromMeta;
+                        await employee.save();
                     }
                 }
             } catch (err) {
@@ -57,13 +64,20 @@ const requireAuth = async (req, res, next) => {
             }
         }
 
+        const isEmployee = !!employee;
+        const workspaceManagerId = isEmployee
+            ? (employee.managerClerkId || employee.invitedBy || payload.sub)
+            : payload.sub;
+
         req.user = {
             clerkId: payload.sub,
             sessionId: payload.sid,
-            role: employee ? "employee" : "manager",
-            name: employee ? employee.name : (managerName || "Manager"),
-            email: employee ? employee.email : managerEmail,
-            employeeId: employee ? employee._id : null,
+            role: isEmployee ? "employee" : "manager",
+            name: isEmployee ? employee.name : (managerName || "Manager"),
+            email: isEmployee ? employee.email : managerEmail,
+            employeeId: isEmployee ? employee._id : null,
+            managerClerkId: isEmployee ? (employee.managerClerkId || employee.invitedBy) : null,
+            workspaceManagerId: workspaceManagerId,
         };
 
         next();
