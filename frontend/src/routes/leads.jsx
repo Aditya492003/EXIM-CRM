@@ -576,7 +576,7 @@ function IconButton({ children, onClick }) {
 }
 
 // Searchable Company Combobox Component
-function CompanySearchSelect({ value, onChange, onCompanySelect }) {
+function CompanySearchSelect({ value, onChange, onCompanySelect, required = false }) {
   const api = useApi();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -606,7 +606,7 @@ function CompanySearchSelect({ value, onChange, onCompanySelect }) {
   return (
     <div className="relative">
       <input
-        required
+        required={required}
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
@@ -983,7 +983,7 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
               <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Priya Patel" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold">Company Name *</label>
+              <label className="mb-1 block text-xs font-semibold">Company Name (Optional)</label>
               <CompanySearchSelect
                 value={formData.company}
                 onChange={(val) => setFormData({ ...formData, company: val })}
@@ -1016,11 +1016,10 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
             </div>
             <div>
               <label className="mb-1 flex items-center text-xs font-semibold">
-                Email *
+                Email (Optional)
                 {autofilled.email && <AutofilledBadge />}
               </label>
               <input
-                required
                 type="email"
                 value={formData.email}
                 onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setAutofilled(p => ({ ...p, email: false })); }}
@@ -1161,7 +1160,7 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
                 <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold">Company Name *</label>
+                <label className="mb-1 block text-xs font-semibold">Company Name (Optional)</label>
                 <CompanySearchSelect
                   value={formData.company}
                   onChange={(val) => setFormData({ ...formData, company: val })}
@@ -1179,8 +1178,8 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
                 <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold">Email *</label>
-                <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+                <label className="mb-1 block text-xs font-semibold">Email (Optional)</label>
+                <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold">Source</label>
