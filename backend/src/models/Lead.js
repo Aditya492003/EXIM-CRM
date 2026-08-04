@@ -112,7 +112,30 @@ const LeadSchema = new Schema({
   workspaceManagerId: {
     type: String,
     index: true
-  }
+  },
+  collaborators: [
+    {
+      clerkId: String,
+      name: String,
+      email: String,
+      role: String,
+      managerId: String,
+      managerName: String,
+      joinedAt: { type: Date, default: Date.now }
+    }
+  ],
+  collaboratingWorkspaceIds: {
+    type: [String],
+    default: [],
+    index: true
+  },
+  timeline: [
+    {
+      activity: String,
+      performedBy: String,
+      timestamp: { type: Date, default: Date.now }
+    }
+  ]
 });
 
 const Lead = mongoose.model("Lead", LeadSchema);

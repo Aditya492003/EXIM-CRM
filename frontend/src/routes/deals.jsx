@@ -10,6 +10,7 @@ import { deals as dummyDeals, stageColors } from "@/data/dummy";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
+import { useUser } from "@clerk/clerk-react";
 
 export const Route = createFileRoute("/deals")({
   component: DealsPage,
@@ -17,7 +18,6 @@ export const Route = createFileRoute("/deals")({
 
 const stages = ["New", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"];
 const priorities = ["Low", "Medium", "High"];
-const owners = ["Nikhil Rao", "Simran Kaur", "Kabir Malhotra", "Anjali Desai", "Varun Iyer", "Zara Khan"];
 const quickFilters = ["All Deals", "High Priority", "My Deals", "Proposal Sent", "Negotiation", "Won Deals"];
 
 function DealsPage() {
@@ -431,6 +431,9 @@ function CompanySearchSelect({ value, onChange }) {
 
 export function AddDealModal({ defaultStage = "New", defaultCompany = "", onClose, onSuccess }) {
   const api = useApi();
+  const { user } = useUser();
+  const currentUserName = user?.fullName || user?.firstName || "";
+
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: defaultCompany ? `${defaultCompany} - New Deal` : "",
@@ -438,23 +441,51 @@ export function AddDealModal({ defaultStage = "New", defaultCompany = "", onClos
     value: 500000,
     stage: defaultStage || "New",
     priority: "Medium",
-    assignedTo: "Nikhil Rao",
+    assignedTo: currentUserName,
     notes: "",
   });
+
+  const [duplicateData, setDuplicateData] = useState(null);
+  const [requestingCollab, setRequestingCollab] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setSubmitting(true);
+      setDuplicateData(null);
       await api.post("/deals", formData);
       toast.success("Deal created successfully");
       onSuccess?.();
       onClose();
     } catch (err) {
       console.error("Create deal error", err);
-      toast.error(err.response?.data?.message || "Failed to create deal");
+      if (err.response?.data?.isDealDuplicate && err.response?.data?.existingDeal) {
+        setDuplicateData(err.response.data.existingDeal);
+      } else {
+        toast.error(err.response?.data?.message || "Failed to create deal");
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRequestCollaboration = async () => {
+    if (!duplicateData?._id) return;
+    try {
+      setRequestingCollab(true);
+      const res = await api.post("/collaboration-requests", {
+        entityType: "Deal",
+        entityId: duplicateData._id,
+        reason: "Requesting collaboration on active business deal opportunity.",
+      });
+      toast.success(res.data?.message || `Collaboration request sent to ${duplicateData.ownerName}`);
+      setDuplicateData(null);
+      onClose();
+    } catch (err) {
+      console.error("Deal collaboration request error:", err);
+      toast.error(err.response?.data?.message || "Failed to send collaboration request");
+    } finally {
+      setRequestingCollab(false);
     }
   };
 
@@ -465,6 +496,53 @@ export function AddDealModal({ defaultStage = "New", defaultCompany = "", onClos
           <h2 className="text-lg font-bold">Add New Deal</h2>
           <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
         </div>
+
+        {duplicateData ? (
+          <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50/90 p-5 dark:border-amber-900/50 dark:bg-amber-950/40 space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white font-bold">
+                <Handshake size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-amber-950 dark:text-amber-200">
+                  Active Deal Already Exists in Database!
+                </h3>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                  An active deal for <strong>{duplicateData.company}</strong> ({duplicateData.name}) already exists.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white/90 dark:bg-slate-900/90 p-3.5 text-xs space-y-1.5 border border-amber-200 shadow-sm">
+              <div><strong>Company Name:</strong> {duplicateData.company}</div>
+              <div><strong>Deal Title:</strong> {duplicateData.name}</div>
+              <div><strong>Deal Value:</strong> ₹{duplicateData.value?.toLocaleString("en-IN")}</div>
+              <div><strong>Current Stage:</strong> <span className="font-semibold text-indigo-600">{duplicateData.stage}</span></div>
+              <div className="pt-2 text-indigo-700 font-bold border-t border-amber-200/60 dark:text-indigo-300 flex items-center justify-between">
+                <span>Current Owner:</span>
+                <span>{duplicateData.ownerName} (Workspace: {duplicateData.managerName})</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200">
+              <button
+                type="button"
+                onClick={() => setDuplicateData(null)}
+                className="rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRequestCollaboration}
+                disabled={requestingCollab}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-2 text-xs font-extrabold text-white shadow-md hover:shadow-lg transition cursor-pointer disabled:opacity-50"
+              >
+                {requestingCollab ? <Loader2 size={14} className="animate-spin" /> : <Handshake size={14} />} Request Collaboration
+              </button>
+            </div>
+          </div>
+        ) : (
         <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
           <div>
             <label className="mb-1 block text-xs font-semibold">Deal Title *</label>
@@ -503,6 +581,7 @@ export function AddDealModal({ defaultStage = "New", defaultCompany = "", onClos
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

@@ -58,7 +58,7 @@ function ProposalsPage() {
         title: p.title || p.service || "Advisory Proposal",
         client: p.client || "",
         service: p.service || "",
-        owner: p.owner || "Nikhil Rao",
+        owner: p.owner || "Team Member",
         value: p.amount ? `₹${(p.amount / 100000).toFixed(1)}L` : "₹0",
         amount: p.amount || 0,
         status: p.status || "Draft",

@@ -1,11 +1,13 @@
 import Lead from "../models/Lead.js";
+import { clerkClient } from "@clerk/clerk-sdk-node";
 
-// Helper: build workspace-isolated filter
+// Helper: build workspace-isolated filter (includes active collaboration leads)
 const userFilter = (req, extra = {}) => {
   const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
   const workspaceCond = [
     { workspaceManagerId: workspaceManagerId },
-    { createdByClerkId: workspaceManagerId }
+    { createdByClerkId: workspaceManagerId },
+    { collaboratingWorkspaceIds: workspaceManagerId }
   ];
 
   const filter = { ...extra };
@@ -19,6 +21,7 @@ const userFilter = (req, extra = {}) => {
     if (req.user.clerkId) {
       empMatch.push({ assignedToClerkId: req.user.clerkId });
       empMatch.push({ createdByClerkId: req.user.clerkId });
+      empMatch.push({ "collaborators.clerkId": req.user.clerkId });
     }
     const empCond = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
     filter.$and = [
@@ -32,7 +35,7 @@ const userFilter = (req, extra = {}) => {
   return filter;
 };
 
-// @desc  Get all leads (Workspace-scoped)
+// @desc  Get all leads (Workspace-scoped + Collaboration shared)
 // @route GET /api/leads
 export const getLeads = async (req, res, next) => {
   try {
@@ -74,7 +77,7 @@ export const getLeads = async (req, res, next) => {
   }
 };
 
-// @desc  Get single lead (Workspace-scoped)
+// @desc  Get single lead (Workspace-scoped + Collaboration shared)
 // @route GET /api/leads/:id
 export const getLead = async (req, res, next) => {
   try {
@@ -88,15 +91,84 @@ export const getLead = async (req, res, next) => {
   }
 };
 
-// @desc  Create lead (Stamps workspaceManagerId)
+// @desc  Create lead (Triple-Attribute Duplicate Detection Scan: Company + Contact + Service)
 // @route POST /api/leads
 export const createLead = async (req, res, next) => {
   try {
+    const { name, company, service } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Contact person name is required" });
+    }
+
+    // 1. Triple-Attribute Duplicate Detection Scan across ALL Workspaces
+    if (company && name && service) {
+      const companyRegex = new RegExp(`^${company.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+      const nameRegex = new RegExp(`^${name.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+      const serviceRegex = new RegExp(`^${service.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+
+      const existingLead = await Lead.findOne({
+        company: companyRegex,
+        name: nameRegex,
+        service: serviceRegex,
+      });
+
+      if (existingLead) {
+        let ownerManagerName = "Workspace Manager";
+        if (existingLead.workspaceManagerId) {
+          try {
+            const clerkUser = await clerkClient.users.getUser(existingLead.workspaceManagerId);
+            const fName = clerkUser?.firstName || "";
+            const lName = clerkUser?.lastName || "";
+            ownerManagerName = `${fName} ${lName}`.trim() || clerkUser?.username || "Workspace Manager";
+          } catch (cErr) {}
+        }
+
+        let resolvedOwnerName = existingLead.assignedTo;
+        if (!resolvedOwnerName || resolvedOwnerName === "Nikhil Rao") {
+          resolvedOwnerName = ownerManagerName;
+        }
+
+        return res.status(409).json({
+          success: false,
+          isLeadDuplicate: true,
+          message: "Lead Already Exists",
+          existingLead: {
+            _id: existingLead._id,
+            company: existingLead.company,
+            name: existingLead.name,
+            service: existingLead.service,
+            ownerName: resolvedOwnerName,
+            ownerClerkId: existingLead.createdByClerkId || existingLead.assignedToClerkId,
+            managerName: ownerManagerName,
+            workspaceManagerId: existingLead.workspaceManagerId,
+            status: existingLead.status,
+          },
+        });
+      }
+    }
+
     const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+    const creatorName = req.user?.name || req.user?.email || "Team Member";
+    const assignedTo = (req.body.assignedTo && req.body.assignedTo !== "Nikhil Rao") ? req.body.assignedTo : creatorName;
+
+    const initialTimeline = [
+      {
+        activity: `Lead Created by ${creatorName}`,
+        performedBy: creatorName,
+        timestamp: new Date(),
+      }
+    ];
+
     const lead = await Lead.create({
       ...req.body,
+      assignedTo: assignedTo,
       createdByClerkId: req.user?.clerkId,
+      assignedToClerkId: req.body.assignedToClerkId || req.user?.clerkId,
       workspaceManagerId: workspaceManagerId,
+      collaborators: [],
+      collaboratingWorkspaceIds: [],
+      timeline: initialTimeline,
     });
 
     res.status(201).json({ success: true, data: lead });
@@ -110,12 +182,27 @@ export const createLead = async (req, res, next) => {
 export const updateLead = async (req, res, next) => {
   try {
     const query = userFilter(req, { _id: req.params.id });
+    const existing = await Lead.findOne(query);
+    if (!existing) return res.status(404).json({ success: false, message: "Lead not found" });
+
+    // Enforce permissions: Collaborators cannot change ownership
+    const isCollaborator = existing.collaborators?.some((c) => c.clerkId === req.user?.clerkId);
+    if (isCollaborator && req.body.assignedTo && req.body.assignedTo !== existing.assignedTo) {
+      return res.status(403).json({ success: false, message: "Collaborators cannot transfer lead ownership." });
+    }
+
+    const updaterName = req.user?.name || "User";
+    const timelineEntry = {
+      activity: `Lead details updated by ${updaterName}`,
+      performedBy: updaterName,
+      timestamp: new Date(),
+    };
+
     const lead = await Lead.findOneAndUpdate(
       query,
-      req.body,
+      { ...req.body, $push: { timeline: timelineEntry } },
       { new: true, runValidators: true }
     );
-    if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
 
     res.status(200).json({ success: true, data: lead });
   } catch (error) {
@@ -131,9 +218,17 @@ export const updateLeadStatus = async (req, res, next) => {
     if (!status) return res.status(400).json({ success: false, message: "Status is required" });
 
     const query = userFilter(req, { _id: req.params.id });
+    const updaterName = req.user?.name || "User";
+
+    const timelineEntry = {
+      activity: `Status updated to "${status}" by ${updaterName}`,
+      performedBy: updaterName,
+      timestamp: new Date(),
+    };
+
     const lead = await Lead.findOneAndUpdate(
       query,
-      { status },
+      { status, $push: { timeline: timelineEntry } },
       { new: true, runValidators: true }
     );
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found or access denied" });
@@ -144,18 +239,30 @@ export const updateLeadStatus = async (req, res, next) => {
   }
 };
 
-// @desc  Update lead notes/follow-up
+// @desc  Update lead notes/follow-up (Collaborators allowed)
 // @route PATCH /api/leads/:id/notes
 export const updateLeadNotes = async (req, res, next) => {
   try {
     const { notes, nextFollowUp, lastContacted } = req.body;
     const query = userFilter(req, { _id: req.params.id });
+    const updaterName = req.user?.name || "User";
+
     const updateData = {};
     if (notes !== undefined) updateData.notes = notes;
     if (nextFollowUp !== undefined) updateData.nextFollowUp = nextFollowUp;
     if (lastContacted !== undefined) updateData.lastContacted = lastContacted;
 
-    const lead = await Lead.findOneAndUpdate(query, updateData, { new: true });
+    const timelineEntry = {
+      activity: `Follow-up note added by ${updaterName}`,
+      performedBy: updaterName,
+      timestamp: new Date(),
+    };
+
+    const lead = await Lead.findOneAndUpdate(
+      query,
+      { ...updateData, $push: { timeline: timelineEntry } },
+      { new: true }
+    );
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found or access denied" });
 
     res.status(200).json({ success: true, data: lead });
@@ -181,13 +288,23 @@ export const toggleFavorite = async (req, res, next) => {
   }
 };
 
-// @desc  Delete lead (Workspace-scoped)
+// @desc  Delete lead (Only Owner or Manager allowed. Collaborators CANNOT delete)
 // @route DELETE /api/leads/:id
 export const deleteLead = async (req, res, next) => {
   try {
     const query = userFilter(req, { _id: req.params.id });
-    const lead = await Lead.findOneAndDelete(query);
+    const lead = await Lead.findOne(query);
     if (!lead) return res.status(404).json({ success: false, message: "Lead not found" });
+
+    const userClerkId = req.user?.clerkId;
+    const isOwner = lead.createdByClerkId === userClerkId || lead.assignedToClerkId === userClerkId;
+    const isManager = req.user?.role === "manager" || lead.workspaceManagerId === userClerkId;
+
+    if (!isOwner && !isManager) {
+      return res.status(403).json({ success: false, message: "Collaborators cannot delete leads. Only the Lead Owner or Manager can delete." });
+    }
+
+    await Lead.findByIdAndDelete(lead._id);
 
     res.status(200).json({ success: true, message: "Lead deleted" });
   } catch (error) {

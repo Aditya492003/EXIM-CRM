@@ -54,7 +54,7 @@ export default function CompaniesPage() {
           primaryContact: c.primaryContact || "",
           phone: c.phone || "",
           email: c.email || "",
-          assignedManager: c.assignedManager || "Nikhil Rao",
+          assignedManager: c.assignedManager || c.ownerManagerName || "Workspace Manager",
           activeDeals: c.activeDeals || 0,
           status: c.status || "Active",
           revenue: c.revenue || 0,
@@ -464,7 +464,7 @@ function CompanyDetailDrawer({ company, onClose, onEdit, onDelete, onMakeLead, o
                 <InfoItem label="Status" value={company.status} />
                 <InfoItem label="Phone" value={company.phone || "Not provided"} />
                 <InfoItem label="Email" value={company.email || "Not provided"} />
-                <InfoItem label="Assigned Manager" value={company.assignedManager || "Nikhil Rao"} />
+                <InfoItem label="Assigned Manager" value={company.assignedManager || company.ownerManagerName || "Workspace Manager"} />
                 <InfoItem label="Created Date" value={company.createdDate || "Recently"} />
               </div>
 

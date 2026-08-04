@@ -44,6 +44,7 @@ const navSections = [
     title: "Team & Operations",
     items: [
       { to: "/employees", label: "Employees", icon: UserPlus },
+      { to: "/collaboration-requests", label: "Collaboration Requests", icon: Handshake },
       { to: "/meetings", label: "Meetings", icon: Video },
       { to: "/services", label: "Services", icon: Briefcase },
     ],

@@ -14,6 +14,7 @@ import { leads as dummyLeads } from "@/data/dummy";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
+import { useUser } from "@clerk/clerk-react";
 
 export const Route = createFileRoute("/leads")({
   component: LeadsPage,
@@ -818,17 +819,17 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
           </div>
 
           {/* Tabs Header */}
-          <div className="flex border-b border-border text-xs font-medium text-muted-foreground">
-            {["overview", "enquiry", "meeting", "notes"].map((t) => (
+          <div className="flex border-b border-border text-xs font-medium text-muted-foreground overflow-x-auto">
+            {["overview", "collaborators", "timeline", "enquiry", "meeting", "notes"].map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
                 className={cn(
-                  "px-4 py-2 capitalize transition border-b-2 cursor-pointer",
+                  "px-3 py-2 capitalize transition border-b-2 cursor-pointer shrink-0",
                   tab === t ? "border-indigo-600 font-bold text-indigo-600" : "border-transparent hover:text-foreground"
                 )}
               >
-                {t}
+                {t === "collaborators" ? `Collaborators (${lead.collaborators?.length || 0})` : t}
               </button>
             ))}
           </div>
@@ -858,6 +859,69 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
                   </a>
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === "collaborators" && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded-xl border border-border p-4 bg-muted/20 space-y-3">
+                <div className="font-bold text-foreground flex items-center justify-between">
+                  <span>Active Team Collaborators ({lead.collaborators?.length || 0})</span>
+                </div>
+                {lead.collaborators && lead.collaborators.length > 0 ? (
+                  <div className="space-y-2">
+                    {lead.collaborators.map((c) => (
+                      <div key={c.clerkId || c.email} className="flex items-center justify-between rounded-xl bg-background p-2.5 border border-border">
+                        <div>
+                          <div className="font-bold text-foreground">{c.name}</div>
+                          <div className="text-[10px] text-muted-foreground">{c.role} · Workspace: {c.managerName || "Manager"}</div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Remove collaborator ${c.name}?`)) return;
+                            try {
+                              await api.delete("/collaboration-requests/remove-collaborator", {
+                                data: { entityType: "Lead", entityId: lead._id, collaboratorClerkId: c.clerkId }
+                              });
+                              toast.success(`Removed ${c.name} from collaborators`);
+                              onClose();
+                            } catch (err) {
+                              toast.error(err.response?.data?.message || "Failed to remove collaborator");
+                            }
+                          }}
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                          title="Remove Collaborator"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-muted-foreground italic">No collaborators assigned to this lead yet.</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === "timeline" && (
+            <div className="space-y-3 text-xs">
+              <div className="rounded-xl border border-border p-4 bg-muted/20 space-y-3">
+                <div className="font-bold text-foreground">Lead Activity Timeline</div>
+                {lead.timeline && lead.timeline.length > 0 ? (
+                  <div className="space-y-3 relative pl-4 border-l-2 border-indigo-200 dark:border-indigo-900">
+                    {lead.timeline.map((t, idx) => (
+                      <div key={idx} className="relative">
+                        <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-indigo-600 border-2 border-background" />
+                        <div className="font-semibold text-foreground">{t.activity}</div>
+                        <div className="text-[10px] text-muted-foreground">{t.performedBy} · {new Date(t.timestamp).toLocaleString("en-IN")}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-muted-foreground italic">No timeline events recorded yet.</div>
+                )}
+              </div>
             </div>
           )}
 
@@ -912,6 +976,9 @@ function InfoItem({ label, value, highlight, danger }) {
 /* ── Add Lead Modal ──────────────────────────────────── */
 export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClose, onSuccess }) {
   const api = useApi();
+  const { user } = useUser();
+  const currentUserName = user?.fullName || user?.firstName || "";
+
   const [submitting, setSubmitting] = useState(false);
   const [autofilled, setAutofilled] = useState({ phone: false, email: false, websiteUrl: false });
   const [formData, setFormData] = useState({
@@ -921,7 +988,7 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
     phone: "",
     email: "",
     source: "Website",
-    assignedTo: "Nikhil Rao",
+    assignedTo: currentUserName,
     status: "New",
     websiteUrl: "",
     region: "",
@@ -943,19 +1010,47 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
     setAutofilled(filled);
   };
 
+  const [duplicateData, setDuplicateData] = useState(null);
+  const [requestingCollab, setRequestingCollab] = useState(false);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setSubmitting(true);
+      setDuplicateData(null);
       await api.post("/leads", formData);
       toast.success("Lead created successfully");
       onSuccess?.();
       onClose();
     } catch (err) {
       console.error("Create lead error", err);
-      toast.error(err.response?.data?.message || "Failed to create lead");
+      if (err.response?.data?.isLeadDuplicate && err.response?.data?.existingLead) {
+        setDuplicateData(err.response.data.existingLead);
+      } else {
+        toast.error(err.response?.data?.message || "Failed to create lead");
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRequestCollaboration = async () => {
+    if (!duplicateData?._id) return;
+    try {
+      setRequestingCollab(true);
+      const res = await api.post("/collaboration-requests", {
+        entityType: "Lead",
+        entityId: duplicateData._id,
+        reason: "Requesting collaboration on matching business lead opportunity.",
+      });
+      toast.success(res.data?.message || `Collaboration request sent to ${duplicateData.ownerName}`);
+      setDuplicateData(null);
+      onClose();
+    } catch (err) {
+      console.error("Collaboration request error:", err);
+      toast.error(err.response?.data?.message || "Failed to send collaboration request");
+    } finally {
+      setRequestingCollab(false);
     }
   };
 
@@ -976,6 +1071,53 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
           </div>
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
+
+        {duplicateData ? (
+          <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50/90 p-5 dark:border-amber-900/50 dark:bg-amber-950/40 space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white font-bold">
+                <Handshake size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-amber-950 dark:text-amber-200">
+                  Lead Already Exists in Database!
+                </h3>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                  A matching lead for <strong>{duplicateData.company}</strong> ({duplicateData.name}) for service <strong>{duplicateData.service}</strong> already exists.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white/90 dark:bg-slate-900/90 p-3.5 text-xs space-y-1.5 border border-amber-200 shadow-sm">
+              <div><strong>Company Name:</strong> {duplicateData.company}</div>
+              <div><strong>Contact Person:</strong> {duplicateData.name}</div>
+              <div><strong>Service:</strong> {duplicateData.service}</div>
+              <div><strong>Current Status:</strong> <span className="font-semibold text-indigo-600">{duplicateData.status}</span></div>
+              <div className="pt-2 text-indigo-700 font-bold border-t border-amber-200/60 dark:text-indigo-300 flex items-center justify-between">
+                <span>Current Owner:</span>
+                <span>{duplicateData.ownerName} (Workspace: {duplicateData.managerName})</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200">
+              <button
+                type="button"
+                onClick={() => setDuplicateData(null)}
+                className="rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRequestCollaboration}
+                disabled={requestingCollab}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-2 text-xs font-extrabold text-white shadow-md hover:shadow-lg transition cursor-pointer disabled:opacity-50"
+              >
+                {requestingCollab ? <Loader2 size={14} className="animate-spin" /> : <Handshake size={14} />} Request Collaboration
+              </button>
+            </div>
+          </div>
+        ) : (
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -1084,6 +1226,7 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );
@@ -1101,7 +1244,7 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
     phone: lead?.phone || "",
     email: lead?.email || "",
     source: lead?.source || "Website",
-    assignedTo: lead?.assignedTo || "Nikhil Rao",
+    assignedTo: lead?.assignedTo || "",
     status: lead?.status || "New",
     nextFollowUp: lead?.nextFollowUp || "",
     enquiryStatus: lead?.enquiryStatus || "Open",

@@ -3,12 +3,13 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
   Search, ChevronDown, Phone, Mail, X, Calendar, StickyNote,
-  Loader2, RefreshCw, MessageSquare
+  Loader2, RefreshCw, MessageSquare, Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AddLeadModal } from "@/routes/leads";
 
 export const Route = createFileRoute("/employee/leads")({
   component: EmployeeLeadsPage,
@@ -33,6 +34,7 @@ function EmployeeLeadsPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeLead, setActiveLead] = useState(null);
+  const [openAdd, setOpenAdd] = useState(false);
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -51,14 +53,13 @@ function EmployeeLeadsPage() {
   }, [fetchLeads]);
 
   const handleStatusChange = async (id, status) => {
-    // Optimistic update
     setLeads(prev => prev.map(l => l._id === id ? { ...l, status } : l));
     try {
       await api.patch(`/leads/${id}/status`, { status });
       toast.success(`Status updated to "${status}"`);
     } catch (error) {
       toast.error("Failed to update status — please try again");
-      fetchLeads(); // revert
+      fetchLeads();
     }
   };
 
@@ -68,13 +69,19 @@ function EmployeeLeadsPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">My Leads</h1>
-            <p className="text-sm text-muted-foreground">{leads.length} leads assigned to you</p>
+            <p className="text-sm text-muted-foreground">{leads.length} leads in your portal</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setOpenAdd(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:shadow-lg transition cursor-pointer"
+            >
+              <Plus size={14} /> Add Lead
+            </button>
             <button onClick={fetchLeads} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition flex items-center gap-1.5">
               <RefreshCw size={13} /> Refresh
             </button>
-            <div className="relative w-full sm:w-72">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
               <input
                 type="text"
@@ -108,8 +115,8 @@ function EmployeeLeadsPage() {
                   <tr>
                     <td colSpan="7" className="p-12 text-center">
                       <MessageSquare className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                      <p className="mt-2 text-sm text-muted-foreground">No leads assigned to you yet.</p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">Your manager will assign leads to you from the Manager Portal.</p>
+                      <p className="mt-2 text-sm text-muted-foreground">No leads found in your portal.</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">Click "+ Add Lead" to create a new lead.</p>
                     </td>
                   </tr>
                 ) : (
@@ -119,39 +126,33 @@ function EmployeeLeadsPage() {
                         <button onClick={() => setActiveLead(l)} className="font-semibold hover:text-indigo-600 text-left">
                           {l.name}
                         </button>
-                        {l.service && <div className="text-[11px] text-muted-foreground mt-0.5">{l.service}</div>}
                       </td>
-                      <td className="px-5 py-4 text-muted-foreground">{l.company || "—"}</td>
+                      <td className="px-5 py-4 font-medium text-indigo-600">{l.company || "N/A"}</td>
                       <td className="px-5 py-4 text-muted-foreground">{l.phone || "—"}</td>
                       <td className="px-5 py-4 text-muted-foreground">{l.email || "—"}</td>
                       <td className="px-5 py-4">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold hover:opacity-80 focus:outline-none transition", statusColors[l.status] || "border-slate-200 bg-slate-50 text-slate-700")}>
-                              {l.status} <ChevronDown size={11} />
+                            <button className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-pointer", statusColors[l.status] || "bg-muted text-muted-foreground")}>
+                              {l.status} <ChevronDown size={12} />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
-                            {statuses.map((s) => (
-                              <DropdownMenuItem key={s} onClick={() => handleStatusChange(l._id, s)}>
-                                <span className={cn("mr-2 h-2 w-2 rounded-full inline-block", statusColors[s]?.split(" ")[0])} />
-                                {s}
+                            {statuses.map((st) => (
+                              <DropdownMenuItem key={st} onClick={() => handleStatusChange(l._id, st)}>
+                                {st}
                               </DropdownMenuItem>
                             ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
-                      <td className="px-5 py-4 text-muted-foreground text-xs">
-                        {l.nextFollowUp ? new Date(l.nextFollowUp).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                      <td className="px-5 py-4 text-xs text-muted-foreground">
+                        {l.nextFollowUp ? new Date(l.nextFollowUp).toLocaleDateString() : "Not set"}
                       </td>
                       <td className="px-5 py-4">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          {l.phone && <a href={`tel:${l.phone}`} className="rounded-lg p-1.5 hover:bg-muted hover:text-foreground transition" title="Call"><Phone size={14} /></a>}
-                          {l.email && <a href={`mailto:${l.email}`} className="rounded-lg p-1.5 hover:bg-muted hover:text-foreground transition" title="Email"><Mail size={14} /></a>}
-                          <button onClick={() => setActiveLead(l)} className="rounded-lg p-1.5 hover:bg-muted hover:text-foreground transition" title="Notes & Follow-up">
-                            <StickyNote size={14} />
-                          </button>
-                        </div>
+                        <button onClick={() => setActiveLead(l)} className="text-xs font-semibold text-indigo-600 hover:underline">
+                          View Details
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -162,23 +163,22 @@ function EmployeeLeadsPage() {
         </div>
       </div>
 
-      {/* Lead Detail & Notes Drawer */}
       {activeLead && (
-        <LeadNotesDrawer
-          lead={activeLead}
-          onClose={() => setActiveLead(null)}
-          onSaved={() => { setActiveLead(null); fetchLeads(); }}
-          api={api}
-        />
+        <EmployeeLeadDetailDrawer lead={activeLead} onClose={() => setActiveLead(null)} onRefresh={fetchLeads} />
+      )}
+
+      {openAdd && (
+        <AddLeadModal onClose={() => setOpenAdd(false)} onSuccess={fetchLeads} />
       )}
     </AppLayout>
   );
 }
 
-function LeadNotesDrawer({ lead, onClose, onSaved, api }) {
+function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh }) {
+  const api = useApi();
   const [notes, setNotes] = useState(lead.notes || "");
   const [nextFollowUp, setNextFollowUp] = useState(
-    lead.nextFollowUp ? new Date(lead.nextFollowUp).toISOString().slice(0, 10) : ""
+    lead.nextFollowUp ? new Date(lead.nextFollowUp).toISOString().split("T")[0] : ""
   );
   const [saving, setSaving] = useState(false);
 
@@ -188,11 +188,12 @@ function LeadNotesDrawer({ lead, onClose, onSaved, api }) {
       await api.patch(`/leads/${lead._id}/notes`, {
         notes,
         nextFollowUp: nextFollowUp || null,
-        lastContacted: new Date().toISOString(),
+        lastContacted: new Date(),
       });
-      toast.success("Notes & follow-up saved!");
-      onSaved();
-    } catch (err) {
+      toast.success("Notes & follow-up updated");
+      onRefresh();
+      onClose();
+    } catch (error) {
       toast.error("Failed to save notes");
     } finally {
       setSaving(false);
@@ -201,55 +202,65 @@ function LeadNotesDrawer({ lead, onClose, onSaved, api }) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-md bg-background shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div>
-            <h2 className="font-bold text-lg">{lead.name}</h2>
-            <p className="text-xs text-muted-foreground">{lead.company} · {lead.service}</p>
+      <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-lg bg-background p-6 shadow-2xl overflow-y-auto flex flex-col justify-between">
+        <div className="space-y-5">
+          <div className="flex items-center justify-between border-b border-border pb-4">
+            <div>
+              <h2 className="text-lg font-bold">{lead.name}</h2>
+              <p className="text-xs font-semibold text-indigo-600">{lead.company}</p>
+            </div>
+            <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={18} /></button>
-        </div>
 
-        {/* Info Grid */}
-        <div className="border-b border-border bg-muted/30 px-6 py-4 grid grid-cols-2 gap-3 text-xs">
-          <div><div className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground mb-1">Status</div>
-            <span className={cn("rounded-full border px-2.5 py-0.5 text-[11px] font-semibold", statusColors[lead.status] || "border-slate-200 bg-slate-50 text-slate-700")}>{lead.status}</span>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-xl border border-border p-3 bg-muted/30">
+              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Service / Job</span>
+              <span className="font-semibold text-foreground">{lead.service || "DGFT Advisory"}</span>
+            </div>
+            <div className="rounded-xl border border-border p-3 bg-muted/30">
+              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Source</span>
+              <span className="font-semibold text-foreground">{lead.source || "Direct"}</span>
+            </div>
+            <div className="rounded-xl border border-border p-3 bg-muted/30">
+              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Phone</span>
+              <a href={`tel:${lead.phone}`} className="font-semibold text-indigo-600 hover:underline">{lead.phone || "N/A"}</a>
+            </div>
+            <div className="rounded-xl border border-border p-3 bg-muted/30">
+              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Email</span>
+              <a href={`mailto:${lead.email}`} className="font-semibold text-indigo-600 hover:underline truncate block">{lead.email || "N/A"}</a>
+            </div>
           </div>
-          <div><div className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground mb-1">Source</div><span className="font-medium">{lead.source || "—"}</span></div>
-          {lead.phone && <div><div className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground mb-1">Phone</div><a href={`tel:${lead.phone}`} className="font-medium text-indigo-600 hover:underline">{lead.phone}</a></div>}
-          {lead.email && <div><div className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground mb-1">Email</div><a href={`mailto:${lead.email}`} className="font-medium text-indigo-600 hover:underline truncate block">{lead.email}</a></div>}
-        </div>
 
-        {/* Editable Section */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold mb-1.5 flex items-center gap-1.5"><Calendar size={13} /> Next Follow-up Date</label>
+          <div className="space-y-3">
+            <label className="block text-xs font-semibold flex items-center gap-1.5">
+              <Calendar size={14} className="text-indigo-500" /> Next Follow-up Date
+            </label>
             <input
               type="date"
               value={nextFollowUp}
               onChange={(e) => setNextFollowUp(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-500"
             />
           </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1.5 flex items-center gap-1.5"><StickyNote size={13} /> Notes & Activity</label>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold flex items-center gap-1.5">
+              <StickyNote size={14} className="text-indigo-500" /> Follow-up Notes & Updates
+            </label>
             <textarea
-              rows={8}
+              rows={5}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Record your call, meeting outcome, or any important context about this lead..."
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none"
+              placeholder="Add call notes, client feedback, or updates..."
+              className="w-full rounded-xl border border-border bg-background p-3 text-sm outline-none focus:border-indigo-500"
             />
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-border px-6 py-4 flex gap-2 justify-end">
-          <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition disabled:opacity-60 flex items-center gap-2">
-            {saving && <Loader2 size={14} className="animate-spin" />}
-            Save Notes
+        <div className="pt-4 border-t border-border flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-xs font-medium hover:bg-muted">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50">
+            {saving && <Loader2 size={13} className="animate-spin" />} Save Follow-up
           </button>
         </div>
       </div>

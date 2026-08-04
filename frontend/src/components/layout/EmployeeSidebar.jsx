@@ -22,6 +22,7 @@ const navSections = [
       { to: "/employee/companies", label: "Companies", icon: Building2 },
       { to: "/employee/leads", label: "My Leads", icon: Users },
       { to: "/employee/deals", label: "My Deals", icon: Handshake },
+      { to: "/collaboration-requests", label: "Collaboration Requests", icon: Handshake },
       { to: "/employee/meetings", label: "My Meetings", icon: Video },
     ],
   },
