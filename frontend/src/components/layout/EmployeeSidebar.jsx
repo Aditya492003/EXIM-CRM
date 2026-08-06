@@ -9,6 +9,7 @@ import {
   Sparkles,
   Users,
   Video,
+  UserCheck,
   Plus,
   LayoutTemplate,
   Boxes,
@@ -20,6 +21,7 @@ const navSections = [
     items: [
       { to: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { to: "/employee/companies", label: "Companies", icon: Building2 },
+      { to: "/contacts", label: "Contacts", icon: UserCheck },
       { to: "/employee/leads", label: "My Leads", icon: Users },
       { to: "/employee/deals", label: "My Deals", icon: Handshake },
       { to: "/collaboration-requests", label: "Collaboration Requests", icon: Handshake },

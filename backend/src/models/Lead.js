@@ -10,6 +10,12 @@ const LeadSchema = new Schema({
   company: {
     type: String
   },
+  companyPhone: {
+    type: String
+  },
+  companyEmail: {
+    type: String
+  },
   companyId: {
     type: Schema.Types.ObjectId,
     ref: 'Company'

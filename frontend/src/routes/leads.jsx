@@ -678,6 +678,104 @@ function CompanySearchSelect({ value, onChange, onCompanySelect, required = fals
   );
 }
 
+// Searchable Contact Person Combobox Component (Fetches contacts linked to selected Company)
+function ContactPersonSearchSelect({ companyName, value, onChange, onContactSelect, required = true }) {
+  const api = useApi();
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!companyName || !companyName.trim()) {
+      setContacts([]);
+      return;
+    }
+
+    const fetchCompanyContacts = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get(`/contacts?company=${encodeURIComponent(companyName.trim())}`);
+        setContacts(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to fetch company contacts", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCompanyContacts();
+  }, [api, companyName]);
+
+  const filtered = useMemo(() => {
+    if (!value) return contacts;
+    const q = value.toLowerCase();
+    return contacts.filter((c) => c.name.toLowerCase().includes(q));
+  }, [contacts, value]);
+
+  return (
+    <div className="relative">
+      <input
+        required={required}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Contact person name (e.g. Priya Patel)"
+        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+      />
+      {open && companyName && companyName.trim() && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl animate-fade-in">
+            {loading ? (
+              <div className="p-2 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 size={12} className="animate-spin text-indigo-500" /> Searching contacts for {companyName}…
+              </div>
+            ) : filtered.length > 0 ? (
+              <div>
+                <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border mb-1">
+                  Existing Contacts at {companyName}
+                </div>
+                {filtered.map((c) => (
+                  <button
+                    key={c._id}
+                    type="button"
+                    onClick={() => {
+                      onChange(c.name);
+                      onContactSelect?.({ name: c.name, phone: c.phone || "", email: c.email || "" });
+                      setOpen(false);
+                    }}
+                    className="flex w-full flex-col rounded-lg px-3 py-2 text-xs text-left hover:bg-muted cursor-pointer transition gap-1"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <UserIcon size={13} className="text-indigo-500 shrink-0" />
+                        <span className="font-bold text-foreground">{c.name}</span>
+                      </div>
+                      {c.designation && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.designation}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 pl-5 text-[10px] text-muted-foreground">
+                      {c.phone && <span>📞 {c.phone}</span>}
+                      {c.email && <span>✉️ {c.email}</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="p-2.5 text-center text-xs text-muted-foreground">
+                No existing contacts found under "<span className="font-semibold text-foreground">{companyName}</span>".
+                <div className="text-[10px] text-indigo-600 mt-0.5 font-medium">New contact will be created automatically when this lead is saved.</div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Reusable Employee Select Component (Fetches live from DB)
 function EmployeeSelect({ value, onChange }) {
   const api = useApi();
@@ -984,6 +1082,8 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
   const [formData, setFormData] = useState({
     name: "",
     company: defaultCompany || "",
+    companyPhone: "",
+    companyEmail: "",
     service: "DGFT Advisory",
     phone: "",
     email: "",
@@ -1011,15 +1111,28 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
   };
 
   const [duplicateData, setDuplicateData] = useState(null);
+  const [companyPromptData, setCompanyPromptData] = useState(null);
   const [requestingCollab, setRequestingCollab] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, options = {}) => {
+    if (e?.preventDefault) e.preventDefault();
     try {
       setSubmitting(true);
       setDuplicateData(null);
-      await api.post("/leads", formData);
-      toast.success("Lead created successfully");
+
+      const payload = {
+        ...formData,
+        ...options,
+      };
+
+      const res = await api.post("/leads", payload);
+
+      if (res.data?.companyNotFound) {
+        setCompanyPromptData({ companyName: res.data.companyName });
+        return;
+      }
+
+      toast.success(res.data?.message || "Lead created successfully");
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -1031,6 +1144,14 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleConfirmCompanyChoice = (createCompany) => {
+    if (createCompany) {
+      handleSubmit(null, { createMissingCompany: true });
+    } else {
+      handleSubmit(null, { confirmCompany: true });
     }
   };
 
@@ -1117,19 +1238,93 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
               </button>
             </div>
           </div>
+        ) : companyPromptData ? (
+          <div className="mt-4 rounded-2xl border border-indigo-300 bg-indigo-50/90 p-5 dark:border-indigo-900/50 dark:bg-indigo-950/40 space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold">
+                <Building2 size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-indigo-950 dark:text-indigo-200">
+                  Company Not Found in Database!
+                </h3>
+                <p className="text-xs text-indigo-800/90 dark:text-indigo-300/90 mt-0.5">
+                  <strong>"{companyPromptData.companyName}"</strong> is not currently saved in your company database.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white/90 dark:bg-slate-900/90 p-3.5 text-xs space-y-1 border border-indigo-200 shadow-sm text-foreground">
+              <div>Would you like to create a new Company record for <strong>"{companyPromptData.companyName}"</strong> and automatically save <strong>"{formData.name}"</strong> as a linked Contact?</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-200">
+              <button
+                type="button"
+                onClick={() => handleConfirmCompanyChoice(false)}
+                disabled={submitting}
+                className="rounded-xl border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-900 hover:bg-indigo-100 cursor-pointer"
+              >
+                NO, Skip & Create Lead Only
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmCompanyChoice(true)}
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-extrabold text-white shadow-md hover:shadow-lg transition cursor-pointer disabled:opacity-50"
+              >
+                {submitting ? <Loader2 size={14} className="animate-spin" /> : <Building2 size={14} />} YES, Create Company & Link Contact
+              </button>
+            </div>
+          </div>
         ) : (
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-semibold">Lead Name *</label>
-              <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Priya Patel" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
+              <label className="mb-1 block text-xs font-semibold">Contact Person Name *</label>
+              <ContactPersonSearchSelect
+                companyName={formData.company}
+                value={formData.name}
+                onChange={(val) => setFormData({ ...formData, name: val })}
+                onContactSelect={(c) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    name: c.name,
+                    phone: c.phone || prev.phone,
+                    email: c.email || prev.email,
+                  }));
+                  setAutofilled({
+                    phone: !!c.phone,
+                    email: !!c.email,
+                    websiteUrl: false,
+                  });
+                }}
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold">Company Name (Optional)</label>
               <CompanySearchSelect
                 value={formData.company}
                 onChange={(val) => setFormData({ ...formData, company: val })}
-                onCompanySelect={handleCompanySelect}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Company Mobile Number (Optional)</label>
+              <input
+                value={formData.companyPhone}
+                onChange={(e) => setFormData({ ...formData, companyPhone: e.target.value })}
+                placeholder="e.g. +91 22 1234 5678"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Company Email (Optional)</label>
+              <input
+                type="email"
+                value={formData.companyEmail}
+                onChange={(e) => setFormData({ ...formData, companyEmail: e.target.value })}
+                placeholder="e.g. info@company.com"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
               />
             </div>
             <div>
@@ -1141,7 +1336,7 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
             </div>
             <div>
               <label className="mb-1 flex items-center text-xs font-semibold">
-                Phone
+                Contact Person Phone
                 {autofilled.phone && <AutofilledBadge />}
               </label>
               <input
@@ -1158,7 +1353,7 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
             </div>
             <div>
               <label className="mb-1 flex items-center text-xs font-semibold">
-                Email (Optional)
+                Contact Person Email (Optional)
                 {autofilled.email && <AutofilledBadge />}
               </label>
               <input
@@ -1299,7 +1494,7 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Basic Details</div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs font-semibold">Lead Name *</label>
+                <label className="mb-1 block text-xs font-semibold">Contact Person Name *</label>
                 <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
               </div>
               <div>
@@ -1317,11 +1512,11 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold">Phone</label>
+                <label className="mb-1 block text-xs font-semibold">Contact Person Phone</label>
                 <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold">Email (Optional)</label>
+                <label className="mb-1 block text-xs font-semibold">Contact Person Email (Optional)</label>
                 <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
               </div>
               <div>

@@ -1,4 +1,6 @@
 import Lead from "../models/Lead.js";
+import Company from "../models/Company.js";
+import Contact from "../models/Contact.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
 
 // Helper: build workspace-isolated filter (includes active collaboration leads)
@@ -91,15 +93,18 @@ export const getLead = async (req, res, next) => {
   }
 };
 
-// @desc  Create lead (Triple-Attribute Duplicate Detection Scan: Company + Contact + Service)
+// @desc  Create lead (With Case 1 & Case 2 Company/Contact auto-linking workflow)
 // @route POST /api/leads
 export const createLead = async (req, res, next) => {
   try {
-    const { name, company, service } = req.body;
+    const { company, name, phone, email, service, createMissingCompany, confirmCompany } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: "Contact person name is required" });
     }
+
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+    const userClerkId = req.user?.clerkId;
 
     // 1. Triple-Attribute Duplicate Detection Scan across ALL Workspaces
     if (company && name && service) {
@@ -148,7 +153,89 @@ export const createLead = async (req, res, next) => {
       }
     }
 
-    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+    // 2. Company Lookup and Contact Auto-Creation Logic (Case 1 & Case 2)
+    let companyRecord = null;
+    let contactRecord = null;
+
+    if (company && company.trim()) {
+      const companyClean = company.trim();
+      const compRegex = new RegExp(`^${companyClean.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+
+      // Search for existing Company in workspace
+      companyRecord = await Company.findOne({
+        name: compRegex,
+        $or: [
+          { workspaceManagerId: workspaceManagerId },
+          { createdByClerkId: workspaceManagerId },
+          { sharedWithManagerIds: workspaceManagerId }
+        ]
+      });
+
+      // CASE 2: Company Doesn't Exist in Database
+      if (!companyRecord) {
+        if (!createMissingCompany && !confirmCompany) {
+          // Ask user via UI modal prompt: "Company Not Found. Create New Company?"
+          return res.status(200).json({
+            success: false,
+            companyNotFound: true,
+            companyName: companyClean,
+            message: `Company "${companyClean}" was not found in your database. Create a new Company record?`
+          });
+        }
+
+        if (createMissingCompany) {
+          // User selected YES: Create new Company record
+          let managerName = req.user?.workspaceManagerName || req.user?.name || "Workspace Manager";
+          let managerEmail = req.user?.email || "";
+
+          companyRecord = await Company.create({
+            name: companyClean,
+            phone: req.body.companyPhone || "",
+            email: req.body.companyEmail || "",
+            website: req.body.websiteUrl || "",
+            assignedManager: req.user?.name || managerName,
+            assignedManagerClerkId: userClerkId,
+            workspaceManagerId: workspaceManagerId,
+            createdByClerkId: userClerkId,
+            ownerManagerName: managerName,
+            ownerManagerEmail: managerEmail,
+            status: "Active",
+          });
+        }
+      }
+
+      // CASE 1 & CASE 2 (YES): Company exists or was created -> Automatically create & link Contact
+      if (companyRecord && name && name.trim()) {
+        const nameClean = name.trim();
+        const nameRegex = new RegExp(`^${nameClean.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+
+        contactRecord = await Contact.findOne({
+          name: nameRegex,
+          companyId: companyRecord._id,
+        });
+
+        if (!contactRecord) {
+          contactRecord = await Contact.create({
+            name: nameClean,
+            company: companyRecord.name,
+            companyId: companyRecord._id,
+            phone: phone || "",
+            email: email || "",
+            createdByClerkId: userClerkId,
+            workspaceManagerId: workspaceManagerId,
+          });
+        }
+
+        // Set primaryContact on Company if missing
+        if (!companyRecord.primaryContact) {
+          await Company.findByIdAndUpdate(companyRecord._id, {
+            primaryContact: nameClean,
+            primaryContactId: contactRecord._id,
+          });
+        }
+      }
+    }
+
     const creatorName = req.user?.name || req.user?.email || "Team Member";
     const assignedTo = (req.body.assignedTo && req.body.assignedTo !== "Nikhil Rao") ? req.body.assignedTo : creatorName;
 
@@ -160,18 +247,34 @@ export const createLead = async (req, res, next) => {
       }
     ];
 
+    if (companyRecord && contactRecord) {
+      initialTimeline.push({
+        activity: `Contact "${contactRecord.name}" automatically linked under Company "${companyRecord.name}"`,
+        performedBy: "System Auto-Sync",
+        timestamp: new Date(),
+      });
+    }
+
     const lead = await Lead.create({
       ...req.body,
+      companyId: companyRecord?._id || undefined,
+      contactId: contactRecord?._id || undefined,
       assignedTo: assignedTo,
-      createdByClerkId: req.user?.clerkId,
-      assignedToClerkId: req.body.assignedToClerkId || req.user?.clerkId,
+      createdByClerkId: userClerkId,
+      assignedToClerkId: req.body.assignedToClerkId || userClerkId,
       workspaceManagerId: workspaceManagerId,
       collaborators: [],
       collaboratingWorkspaceIds: [],
       timeline: initialTimeline,
     });
 
-    res.status(201).json({ success: true, data: lead });
+    res.status(201).json({
+      success: true,
+      message: "Lead created successfully",
+      data: lead,
+      companyCreated: !!(companyRecord && createMissingCompany),
+      contactCreated: !!contactRecord,
+    });
   } catch (error) {
     next(error);
   }

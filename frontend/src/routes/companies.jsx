@@ -211,7 +211,7 @@ export default function CompaniesPage() {
                               {c.name}
                             </button>
                             <div className="text-[11px] text-muted-foreground">
-                              {c.industry} {c.primaryContact ? `· Contact: ${c.primaryContact}` : ""}
+                              {c.industry || "General Industry"}
                             </div>
                           </div>
                         </div>
