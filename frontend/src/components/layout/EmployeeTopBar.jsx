@@ -1,7 +1,9 @@
 import { cn } from "@/lib/utils";
 import { UserButton, useUser, useAuth } from "@clerk/clerk-react";
-import { Calendar, Search, Bell, ChevronDown } from "lucide-react";
+import { Calendar, Search, Bell, ChevronDown, Sun, Moon } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useTheme } from "@/context/ThemeContext";
+import { Button } from "@/components/ui/button";
 
 const statuses = [
   { label: "Available", value: "Available", color: "bg-emerald-500", textCls: "text-emerald-700 dark:text-emerald-400", bgCls: "bg-emerald-50 dark:bg-emerald-500/10" },
@@ -12,6 +14,7 @@ const statuses = [
 export function EmployeeTopBar() {
   const { user } = useUser();
   const { getToken } = useAuth();
+  const { dark, toggleDark } = useTheme();
   const [currentStatus, setCurrentStatus] = useState(statuses[0]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -93,6 +96,11 @@ export function EmployeeTopBar() {
             </div>
           )}
         </div>
+
+        {/* Theme Toggle */}
+        <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer" onClick={toggleDark}>
+          {dark ? <Sun size={18} /> : <Moon size={18} />}
+        </Button>
 
         {/* User Button */}
         <div className="flex items-center gap-3 border-l border-border/50 pl-4">

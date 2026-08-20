@@ -6,6 +6,8 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import { getRouter, queryClient } from "./router";
 import "./styles.css";
 
+import { ThemeProvider } from "./context/ThemeContext";
+
 const PUBLISHABLE_KEY =
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
   "pk_test_Y29zbWljLW1vc3F1aXRvLTk5LmNsZXJrLmFjY291bnRzLmRldiQ";
@@ -16,7 +18,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
       </QueryClientProvider>
     </ClerkProvider>
   </React.StrictMode>

@@ -8,16 +8,12 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { SignedIn, SignedOut, UserButton, SignInButton, SignUpButton, useUser } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useApi } from "@/lib/api";
+import { useTheme } from "@/context/ThemeContext";
 
 export function TopBar() {
-  const [dark, setDark] = useState(false);
+  const { dark, toggleDark } = useTheme();
   const [openSearch, setOpenSearch] = useState(false);
   const { user } = useUser();
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-  }, [dark]);
 
   // Global Ctrl+K / Cmd+K keyboard shortcut listener
   useEffect(() => {
@@ -67,7 +63,7 @@ export function TopBar() {
           <Button variant="ghost" size="icon" className="rounded-xl md:hidden cursor-pointer" onClick={() => setOpenSearch(true)}>
             <Search size={18} />
           </Button>
-          <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer" onClick={() => setDark((d) => !d)}>
+          <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer" onClick={toggleDark}>
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </Button>
           <Button variant="ghost" size="icon" className="relative rounded-xl cursor-pointer">
