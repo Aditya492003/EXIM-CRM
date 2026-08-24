@@ -16,6 +16,7 @@ import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { useUser } from "@clerk/clerk-react";
 import { ConvertLeadToDealModal } from "@/components/crm/ConvertLeadToDealModal";
+import { AddMeetingModal } from "@/components/crm/AddMeetingModal";
 
 export const Route = createFileRoute("/leads")({
   component: LeadsPage,
@@ -63,6 +64,7 @@ function LeadsPage() {
   const [active, setActive] = useState(null);
   const [editing, setEditing] = useState(null);
   const [convertingLead, setConvertingLead] = useState(null);
+  const [schedulingMeetingLead, setSchedulingMeetingLead] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
   const [visibleCols, setVisibleCols] = useState(new Set(DEFAULT_COLUMNS));
   const [openColumns, setOpenColumns] = useState(false);
@@ -514,6 +516,13 @@ function LeadsPage() {
 
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                        <button
+                          onClick={() => setSchedulingMeetingLead(l)}
+                          title="Schedule Meeting for this Lead"
+                          className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 cursor-pointer transition text-xs"
+                        >
+                          📅
+                        </button>
                         <button onClick={() => setConvertingLead(l)} title="Convert to Deal" className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer">
                           <Briefcase size={14} />
                         </button>
@@ -566,6 +575,7 @@ function LeadsPage() {
           onEdit={() => { setEditing(active); setActive(null); }}
           onDelete={() => handleDelete(active)}
           onConvertToDeal={() => { setConvertingLead(active); setActive(null); }}
+          onScheduleMeeting={() => { setSchedulingMeetingLead(active); }}
         />
       )}
 
@@ -590,6 +600,17 @@ function LeadsPage() {
           lead={convertingLead}
           onClose={() => setConvertingLead(null)}
           onSuccess={fetchLeads}
+        />
+      )}
+
+      {schedulingMeetingLead && (
+        <AddMeetingModal
+          defaultLead={schedulingMeetingLead}
+          onClose={() => setSchedulingMeetingLead(null)}
+          onSuccess={() => {
+            setSchedulingMeetingLead(null);
+            fetchLeads();
+          }}
         />
       )}
 
@@ -897,7 +918,7 @@ function ServiceSelect({ value, onChange }) {
 }
 
 /* ── Full Interactive Lead Detail Drawer ──────────────── */
-function LeadDetailDrawer({ lead, onClose, onEdit, onDelete, onConvertToDeal }) {
+function LeadDetailDrawer({ lead, onClose, onEdit, onDelete, onConvertToDeal, onScheduleMeeting }) {
   const [tab, setTab] = useState("overview");
 
   return (
@@ -920,6 +941,9 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete, onConvertToDeal }) 
               <button onClick={onConvertToDeal} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer" title="Convert to Deal">
                 <Briefcase size={16} />
               </button>
+              <button onClick={onScheduleMeeting} className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 cursor-pointer" title="Schedule Meeting">
+                <Calendar size={16} />
+              </button>
               <button onClick={onEdit} className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer" title="Edit Lead">
                 <Pencil size={16} />
               </button>
@@ -940,13 +964,13 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete, onConvertToDeal }) 
               <Mail size={16} className="text-indigo-500" />
               <span>Email</span>
             </button>
+            <button onClick={onScheduleMeeting} className="flex flex-col items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300 transition cursor-pointer">
+              <Calendar size={16} className="text-indigo-600 dark:text-indigo-400" />
+              <span>Meeting</span>
+            </button>
             <button onClick={onConvertToDeal} className="flex flex-col items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 transition cursor-pointer">
               <Briefcase size={16} className="text-emerald-600 dark:text-emerald-400" />
               <span>Convert</span>
-            </button>
-            <button onClick={onEdit} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
-              <Calendar size={16} className="text-indigo-500" />
-              <span>Meeting</span>
             </button>
             <button onClick={onEdit} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
               <Pencil size={16} className="text-indigo-500" />
@@ -1504,10 +1528,6 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
     websiteUrl: lead?.websiteUrl || "",
     companySize: lead?.companySize || "Not specified",
     region: lead?.region || "",
-    meetingType: lead?.meetingType || "Not Scheduled",
-    meetingDate: lead?.meetingDate || "",
-    meetingMode: lead?.meetingMode || "Video Call",
-    meetingOutcome: lead?.meetingOutcome || "Pending",
     notes: lead?.notes || "",
   });
 
@@ -1656,36 +1676,7 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
             </div>
           </section>
 
-          {/* Section 4: Meeting */}
-          <section>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Meeting Schedule</div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-semibold">Meeting Type</label>
-                <select value={formData.meetingType} onChange={(e) => setFormData({ ...formData, meetingType: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
-                  {MEETING_TYPES.map((o) => <option key={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold">Meeting Date & Time</label>
-                <input type="datetime-local" value={formData.meetingDate} onChange={(e) => setFormData({ ...formData, meetingDate: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold">Meeting Mode</label>
-                <select value={formData.meetingMode} onChange={(e) => setFormData({ ...formData, meetingMode: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
-                  {["In Person", "Video Call", "Phone Call", "On-site Visit"].map((o) => <option key={o}>{o}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold">Meeting Outcome</label>
-                <select value={formData.meetingOutcome} onChange={(e) => setFormData({ ...formData, meetingOutcome: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
-                  {["Pending", "Positive", "Neutral", "Needs Follow-up", "Not Interested"].map((o) => <option key={o}>{o}</option>)}
-                </select>
-              </div>
-            </div>
-          </section>
-
-          {/* Section 5: Notes */}
+          {/* Section 4: Notes */}
           <section>
             <label className="mb-1 block text-xs font-semibold">Notes & Engagement Context</label>
             <textarea rows={3} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Update notes about this lead…" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400" />

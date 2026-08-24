@@ -5,11 +5,12 @@ import {
   Video, Phone, MapPin, Calendar, Clock, Link2, Search,
   CheckCircle2, Clock3, XCircle, Loader2, RefreshCw,
   StickyNote, Building2, Users, ChevronDown, X,
-  CalendarDays, AlertCircle
+  CalendarDays, AlertCircle, Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
+import { AddMeetingModal } from "@/components/crm/AddMeetingModal";
 
 export const Route = createFileRoute("/employee/meetings")({
   component: EmployeeMeetingsPage,
@@ -68,6 +69,7 @@ function EmployeeMeetingsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeOutcomeModal, setActiveOutcomeModal] = useState(null); // meeting object
+  const [openAdd, setOpenAdd] = useState(false);
 
   const fetchMeetings = useCallback(async () => {
     try {
@@ -117,12 +119,20 @@ function EmployeeMeetingsPage() {
               View meetings assigned to you and update their outcome.
             </p>
           </div>
-          <button
-            onClick={fetchMeetings}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition"
-          >
-            <RefreshCw size={13} /> Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setOpenAdd(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:shadow-lg transition cursor-pointer"
+            >
+              <Plus size={14} /> Schedule Meeting
+            </button>
+            <button
+              onClick={fetchMeetings}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition cursor-pointer"
+            >
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -200,6 +210,17 @@ function EmployeeMeetingsPage() {
             fetchMeetings();
           }}
           api={api}
+        />
+      )}
+
+      {/* Schedule Meeting Modal */}
+      {openAdd && (
+        <AddMeetingModal
+          onClose={() => setOpenAdd(false)}
+          onSuccess={() => {
+            setOpenAdd(false);
+            fetchMeetings();
+          }}
         />
       )}
     </AppLayout>

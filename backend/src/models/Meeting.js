@@ -33,6 +33,10 @@ const MeetingSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Contact'
   },
+  leadId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Lead'
+  },
   mode: {
     type: String // e.g. "Virtual (Google Meet)", "In-Person"
   },

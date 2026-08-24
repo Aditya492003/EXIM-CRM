@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AddLeadModal } from "@/routes/leads";
 import { ConvertLeadToDealModal } from "@/components/crm/ConvertLeadToDealModal";
+import { AddMeetingModal } from "@/components/crm/AddMeetingModal";
 
 export const Route = createFileRoute("/employee/leads")({
   component: EmployeeLeadsPage,
@@ -36,6 +37,7 @@ function EmployeeLeadsPage() {
   const [loading, setLoading] = useState(true);
   const [activeLead, setActiveLead] = useState(null);
   const [convertingLead, setConvertingLead] = useState(null);
+  const [schedulingMeetingLead, setSchedulingMeetingLead] = useState(null);
   const [openAdd, setOpenAdd] = useState(false);
 
   const fetchLeads = useCallback(async () => {
@@ -170,6 +172,14 @@ function EmployeeLeadsPage() {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={() => setSchedulingMeetingLead(l)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:underline cursor-pointer"
+                            title="Schedule Meeting"
+                          >
+                            📅
+                          </button>
+                          <span className="text-muted-foreground/40">|</span>
+                          <button
                             onClick={() => setConvertingLead(l)}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
                             title="Convert to Deal"
@@ -197,6 +207,7 @@ function EmployeeLeadsPage() {
           onClose={() => setActiveLead(null)}
           onRefresh={fetchLeads}
           onConvertToDeal={() => { setConvertingLead(activeLead); setActiveLead(null); }}
+          onScheduleMeeting={() => { setSchedulingMeetingLead(activeLead); }}
         />
       )}
 
@@ -208,6 +219,17 @@ function EmployeeLeadsPage() {
         />
       )}
 
+      {schedulingMeetingLead && (
+        <AddMeetingModal
+          defaultLead={schedulingMeetingLead}
+          onClose={() => setSchedulingMeetingLead(null)}
+          onSuccess={() => {
+            setSchedulingMeetingLead(null);
+            fetchLeads();
+          }}
+        />
+      )}
+
       {openAdd && (
         <AddLeadModal onClose={() => setOpenAdd(false)} onSuccess={fetchLeads} />
       )}
@@ -215,7 +237,7 @@ function EmployeeLeadsPage() {
   );
 }
 
-function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh, onConvertToDeal }) {
+function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh, onConvertToDeal, onScheduleMeeting }) {
   const api = useApi();
   const [notes, setNotes] = useState(lead.notes || "");
   const [nextFollowUp, setNextFollowUp] = useState(
@@ -251,6 +273,13 @@ function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh, onConvertToDeal })
               <p className="text-xs font-semibold text-indigo-600">{lead.company}</p>
             </div>
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={onScheduleMeeting}
+                className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition cursor-pointer"
+                title="Schedule Meeting"
+              >
+                <Calendar size={13} /> Meeting
+              </button>
               <button
                 onClick={onConvertToDeal}
                 className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition cursor-pointer"

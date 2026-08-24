@@ -1,4 +1,5 @@
 import Meeting from "../models/Meeting.js";
+import Lead from "../models/Lead.js";
 
 // Helper: build workspace-isolated filter
 const userFilter = (req, extra = {}) => {
@@ -121,6 +122,25 @@ export const createMeeting = async (req, res, next) => {
       organizedByClerkId: req.user?.clerkId,
       workspaceManagerId: workspaceManagerId,
     });
+
+    if (req.body.leadId) {
+      try {
+        const updaterName = req.user?.name || "User";
+        const dateFormatted = meeting.date ? new Date(meeting.date).toLocaleDateString("en-IN") : "";
+        await Lead.findByIdAndUpdate(req.body.leadId, {
+          $push: {
+            timeline: {
+              activity: `Meeting "${meeting.title}" scheduled for ${dateFormatted} at ${meeting.time || ""} by ${updaterName}`,
+              performedBy: updaterName,
+              timestamp: new Date(),
+            }
+          },
+          ...(meeting.date ? { nextFollowUp: meeting.date } : {}),
+        });
+      } catch (lErr) {
+        console.error("Failed to link meeting to lead timeline:", lErr);
+      }
+    }
 
     res.status(201).json({ success: true, data: meeting });
   } catch (error) {
