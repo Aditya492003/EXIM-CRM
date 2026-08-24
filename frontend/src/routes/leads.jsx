@@ -5,7 +5,7 @@ import {
   Filter, MessageSquare, MoreHorizontal, Phone, Plus, RefreshCw, Search,
   Sparkles, Star, Trash2, Upload, X, Mail, FileText, Handshake, CheckCircle2,
   Clock, User as UserIcon, PhoneCall, StickyNote, Pencil, Globe, Loader2, Building2,
-  ExternalLink, ShieldCheck, Tag
+  ExternalLink, ShieldCheck, Tag, Briefcase, IndianRupee
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { useUser } from "@clerk/clerk-react";
+import { ConvertLeadToDealModal } from "@/components/crm/ConvertLeadToDealModal";
 
 export const Route = createFileRoute("/leads")({
   component: LeadsPage,
@@ -61,6 +62,7 @@ function LeadsPage() {
   const [openAdd, setOpenAdd] = useState(false);
   const [active, setActive] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [convertingLead, setConvertingLead] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
   const [visibleCols, setVisibleCols] = useState(new Set(DEFAULT_COLUMNS));
   const [openColumns, setOpenColumns] = useState(false);
@@ -116,6 +118,12 @@ function LeadsPage() {
   // Real-time backend sync on inline status dropdown change
   const handleStatusChange = async (id, newStatus, mongoId) => {
     setLeadsList((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
+    const currentLead = leadsList.find((l) => l.id === id || l._id === mongoId);
+
+    if (newStatus === "Converted" && currentLead) {
+      setConvertingLead({ ...currentLead, status: "Converted", _id: mongoId || currentLead._id });
+    }
+
     if (mongoId) {
       try {
         await api.patch(`/leads/${mongoId}/status`, { status: newStatus });
@@ -482,10 +490,21 @@ function LeadsPage() {
                         <select
                           value={l.status}
                           onChange={(e) => handleStatusChange(l.id, e.target.value, l._id)}
-                          className="rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold outline-none focus:border-indigo-400 cursor-pointer"
+                          className={cn(
+                            "rounded-lg border bg-background px-2 py-1 text-xs font-semibold outline-none focus:border-indigo-400 cursor-pointer",
+                            l.status === "Converted" ? "border-emerald-300 text-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20" : "border-border"
+                          )}
                         >
                           {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
+                        {l.status === "Converted" && (
+                          <button
+                            onClick={() => setConvertingLead(l)}
+                            className="mt-1 flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-100/70 hover:bg-emerald-200/70 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded cursor-pointer transition shadow-xs"
+                          >
+                            <Briefcase size={10} /> Convert to Deal
+                          </button>
+                        )}
                       </td>
                     )}
 
@@ -495,6 +514,9 @@ function LeadsPage() {
 
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                        <button onClick={() => setConvertingLead(l)} title="Convert to Deal" className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer">
+                          <Briefcase size={14} />
+                        </button>
                         <button onClick={() => setActive(l)} title="View Detail Drawer" className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer">
                           <FileText size={14} />
                         </button>
@@ -543,6 +565,7 @@ function LeadsPage() {
           onClose={() => setActive(null)}
           onEdit={() => { setEditing(active); setActive(null); }}
           onDelete={() => handleDelete(active)}
+          onConvertToDeal={() => { setConvertingLead(active); setActive(null); }}
         />
       )}
 
@@ -559,6 +582,14 @@ function LeadsPage() {
           availableAssigned={availableAssigned}
           availableServices={availableServices}
           onReset={resetFilters}
+        />
+      )}
+
+      {convertingLead && (
+        <ConvertLeadToDealModal
+          lead={convertingLead}
+          onClose={() => setConvertingLead(null)}
+          onSuccess={fetchLeads}
         />
       )}
 
@@ -866,7 +897,7 @@ function ServiceSelect({ value, onChange }) {
 }
 
 /* ── Full Interactive Lead Detail Drawer ──────────────── */
-function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
+function LeadDetailDrawer({ lead, onClose, onEdit, onDelete, onConvertToDeal }) {
   const [tab, setTab] = useState("overview");
 
   return (
@@ -886,6 +917,9 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <button onClick={onConvertToDeal} className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer" title="Convert to Deal">
+                <Briefcase size={16} />
+              </button>
               <button onClick={onEdit} className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer" title="Edit Lead">
                 <Pencil size={16} />
               </button>
@@ -897,7 +931,7 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             <button onClick={() => window.open(`tel:${lead.phone}`)} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
               <PhoneCall size={16} className="text-indigo-500" />
               <span>Call</span>
@@ -905,6 +939,10 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
             <button onClick={() => window.open(`mailto:${lead.email}`)} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
               <Mail size={16} className="text-indigo-500" />
               <span>Email</span>
+            </button>
+            <button onClick={onConvertToDeal} className="flex flex-col items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 transition cursor-pointer">
+              <Briefcase size={16} className="text-emerald-600 dark:text-emerald-400" />
+              <span>Convert</span>
             </button>
             <button onClick={onEdit} className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer">
               <Calendar size={16} className="text-indigo-500" />
@@ -935,6 +973,25 @@ function LeadDetailDrawer({ lead, onClose, onEdit, onDelete }) {
           {/* Tab Contents */}
           {tab === "overview" && (
             <div className="space-y-4 text-xs">
+              {lead.status === "Converted" && (
+                <div className="rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50 to-teal-50 p-3.5 dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-teal-950/40 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-xs text-emerald-950 dark:text-emerald-200 flex items-center gap-1.5">
+                      <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400" /> Lead Ready for Deal Conversion
+                    </div>
+                    <p className="text-[11px] text-emerald-800/90 dark:text-emerald-300/80 mt-0.5">
+                      Marked as Converted. Click below to set deal amount and create deal.
+                    </p>
+                  </div>
+                  <button
+                    onClick={onConvertToDeal}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition cursor-pointer shrink-0"
+                  >
+                    <Briefcase size={13} /> Convert to Deal
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4 rounded-xl border border-border p-4 bg-muted/30">
                 <InfoItem label="Status" value={lead.status} highlight />
                 <InfoItem label="Assigned Manager" value={lead.assignedTo} />

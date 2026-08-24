@@ -3,13 +3,14 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
   Search, ChevronDown, Phone, Mail, X, Calendar, StickyNote,
-  Loader2, RefreshCw, MessageSquare, Plus
+  Loader2, RefreshCw, MessageSquare, Plus, Briefcase, CheckCircle2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AddLeadModal } from "@/routes/leads";
+import { ConvertLeadToDealModal } from "@/components/crm/ConvertLeadToDealModal";
 
 export const Route = createFileRoute("/employee/leads")({
   component: EmployeeLeadsPage,
@@ -34,6 +35,7 @@ function EmployeeLeadsPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeLead, setActiveLead] = useState(null);
+  const [convertingLead, setConvertingLead] = useState(null);
   const [openAdd, setOpenAdd] = useState(false);
 
   const fetchLeads = useCallback(async () => {
@@ -54,6 +56,12 @@ function EmployeeLeadsPage() {
 
   const handleStatusChange = async (id, status) => {
     setLeads(prev => prev.map(l => l._id === id ? { ...l, status } : l));
+    const currentLead = leads.find(l => l._id === id);
+
+    if (status === "Converted" && currentLead) {
+      setConvertingLead({ ...currentLead, status: "Converted" });
+    }
+
     try {
       await api.patch(`/leads/${id}/status`, { status });
       toast.success(`Status updated to "${status}"`);
@@ -123,7 +131,7 @@ function EmployeeLeadsPage() {
                   leads.map((l) => (
                     <tr key={l._id} className="hover:bg-muted/30 transition">
                       <td className="px-5 py-4">
-                        <button onClick={() => setActiveLead(l)} className="font-semibold hover:text-indigo-600 text-left">
+                        <button onClick={() => setActiveLead(l)} className="font-semibold hover:text-indigo-600 text-left cursor-pointer">
                           {l.name}
                         </button>
                       </td>
@@ -131,28 +139,48 @@ function EmployeeLeadsPage() {
                       <td className="px-5 py-4 text-muted-foreground">{l.phone || "—"}</td>
                       <td className="px-5 py-4 text-muted-foreground">{l.email || "—"}</td>
                       <td className="px-5 py-4">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-pointer", statusColors[l.status] || "bg-muted text-muted-foreground")}>
-                              {l.status} <ChevronDown size={12} />
+                        <div className="flex flex-col items-start gap-1">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-pointer", statusColors[l.status] || "bg-muted text-muted-foreground")}>
+                                {l.status} <ChevronDown size={12} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              {statuses.map((st) => (
+                                <DropdownMenuItem key={st} onClick={() => handleStatusChange(l._id, st)}>
+                                  {st}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {l.status === "Converted" && (
+                            <button
+                              onClick={() => setConvertingLead(l)}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-100/70 hover:bg-emerald-200/70 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded cursor-pointer transition shadow-xs"
+                            >
+                              <Briefcase size={10} /> Convert to Deal
                             </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {statuses.map((st) => (
-                              <DropdownMenuItem key={st} onClick={() => handleStatusChange(l._id, st)}>
-                                {st}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-xs text-muted-foreground">
                         {l.nextFollowUp ? new Date(l.nextFollowUp).toLocaleDateString() : "Not set"}
                       </td>
                       <td className="px-5 py-4">
-                        <button onClick={() => setActiveLead(l)} className="text-xs font-semibold text-indigo-600 hover:underline">
-                          View Details
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setConvertingLead(l)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
+                            title="Convert to Deal"
+                          >
+                            <Briefcase size={13} /> Convert
+                          </button>
+                          <span className="text-muted-foreground/40">|</span>
+                          <button onClick={() => setActiveLead(l)} className="text-xs font-semibold text-indigo-600 hover:underline cursor-pointer">
+                            Details
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -164,7 +192,20 @@ function EmployeeLeadsPage() {
       </div>
 
       {activeLead && (
-        <EmployeeLeadDetailDrawer lead={activeLead} onClose={() => setActiveLead(null)} onRefresh={fetchLeads} />
+        <EmployeeLeadDetailDrawer
+          lead={activeLead}
+          onClose={() => setActiveLead(null)}
+          onRefresh={fetchLeads}
+          onConvertToDeal={() => { setConvertingLead(activeLead); setActiveLead(null); }}
+        />
+      )}
+
+      {convertingLead && (
+        <ConvertLeadToDealModal
+          lead={convertingLead}
+          onClose={() => setConvertingLead(null)}
+          onSuccess={fetchLeads}
+        />
       )}
 
       {openAdd && (
@@ -174,7 +215,7 @@ function EmployeeLeadsPage() {
   );
 }
 
-function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh }) {
+function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh, onConvertToDeal }) {
   const api = useApi();
   const [notes, setNotes] = useState(lead.notes || "");
   const [nextFollowUp, setNextFollowUp] = useState(
@@ -209,8 +250,36 @@ function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh }) {
               <h2 className="text-lg font-bold">{lead.name}</h2>
               <p className="text-xs font-semibold text-indigo-600">{lead.company}</p>
             </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={onConvertToDeal}
+                className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition cursor-pointer"
+                title="Convert to Deal"
+              >
+                <Briefcase size={13} /> Convert to Deal
+              </button>
+              <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={16} /></button>
+            </div>
           </div>
+
+          {lead.status === "Converted" && (
+            <div className="rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50 to-teal-50 p-3 dark:border-emerald-900/50 dark:from-emerald-950/40 dark:to-teal-950/40 flex items-center justify-between gap-3">
+              <div>
+                <div className="font-bold text-xs text-emerald-950 dark:text-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" /> Ready to Convert
+                </div>
+                <p className="text-[10px] text-emerald-800/90 dark:text-emerald-300/80 mt-0.5">
+                  Set the deal amount to complete commercial creation.
+                </p>
+              </div>
+              <button
+                onClick={onConvertToDeal}
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs cursor-pointer"
+              >
+                Set Amount
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="rounded-xl border border-border p-3 bg-muted/30">
@@ -258,8 +327,8 @@ function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh }) {
         </div>
 
         <div className="pt-4 border-t border-border flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-xs font-medium hover:bg-muted">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50">
+          <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-xs font-medium hover:bg-muted cursor-pointer">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 cursor-pointer">
             {saving && <Loader2 size={13} className="animate-spin" />} Save Follow-up
           </button>
         </div>
@@ -267,3 +336,4 @@ function EmployeeLeadDetailDrawer({ lead, onClose, onRefresh }) {
     </div>
   );
 }
+

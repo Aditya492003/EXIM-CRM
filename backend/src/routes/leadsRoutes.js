@@ -10,6 +10,7 @@ import {
   toggleFavorite,
   deleteLead,
   exportLeadsCSV,
+  convertLeadToDeal,
 } from "../controllers/leadsController.js";
 
 const router = express.Router();
@@ -21,6 +22,9 @@ router.get("/export/csv", exportLeadsCSV);
 
 router.route("/").get(getLeads).post(createLead);
 router.route("/:id").get(getLead).put(updateLead).delete(deleteLead);
+
+// Lead conversion to deal
+router.post("/:id/convert", convertLeadToDeal);
 
 // Inline patch routes
 router.patch("/:id/status", updateLeadStatus);

@@ -1,4 +1,5 @@
 import Lead from "../models/Lead.js";
+import Deal from "../models/Deal.js";
 import Company from "../models/Company.js";
 import Contact from "../models/Contact.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
@@ -447,3 +448,135 @@ export const exportLeadsCSV = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc  Convert Lead to Deal with customizable deal amount and details
+// @route POST /api/leads/:id/convert
+export const convertLeadToDeal = async (req, res, next) => {
+  try {
+    const leadId = req.params.id;
+    const query = userFilter(req, { _id: leadId });
+    const lead = await Lead.findOne(query);
+
+    if (!lead) {
+      return res.status(404).json({ success: false, message: "Lead not found or access denied" });
+    }
+
+    const {
+      name,
+      value,
+      stage = "New",
+      priority = "Medium",
+      assignedTo,
+      assignedToClerkId,
+      expectedCloseDate,
+      notes,
+      forceConvert = false,
+    } = req.body;
+
+    const workspaceManagerId = lead.workspaceManagerId || req.user?.workspaceManagerId || req.user?.clerkId;
+    const userClerkId = req.user?.clerkId;
+    const userName = req.user?.name || req.user?.email || "Team Member";
+
+    const dealName = name && name.trim()
+      ? name.trim()
+      : `${lead.company || lead.name} - ${lead.service || "Deal"}`;
+
+    const dealAssignedTo = (assignedTo && assignedTo !== "Nikhil Rao") ? assignedTo : (lead.assignedTo || userName);
+    const dealAssignedToClerkId = assignedToClerkId || lead.assignedToClerkId || userClerkId;
+    const dealValue = Number(value) >= 0 ? Number(value) : 0;
+
+    // Check for duplicate active deal across workspace if not force-converting
+    if (lead.company && lead.service && !forceConvert) {
+      const companyRegex = new RegExp(`^${lead.company.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+      const serviceRegex = new RegExp(`^${lead.service.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+
+      const existingDeal = await Deal.findOne({
+        company: companyRegex,
+        service: serviceRegex,
+        stage: { $nin: ["Won", "Lost"] }
+      });
+
+      if (existingDeal) {
+        let ownerManagerName = "Workspace Manager";
+        if (existingDeal.workspaceManagerId) {
+          try {
+            const clerkUser = await clerkClient.users.getUser(existingDeal.workspaceManagerId);
+            const fName = clerkUser?.firstName || "";
+            const lName = clerkUser?.lastName || "";
+            ownerManagerName = `${fName} ${lName}`.trim() || clerkUser?.username || "Workspace Manager";
+          } catch (cErr) {}
+        }
+        let resolvedOwnerName = existingDeal.assignedTo || ownerManagerName;
+
+        return res.status(409).json({
+          success: false,
+          isDealDuplicate: true,
+          message: "An active deal already exists for this company and service",
+          existingDeal: {
+            _id: existingDeal._id,
+            company: existingDeal.company,
+            name: existingDeal.name,
+            service: existingDeal.service,
+            value: existingDeal.value,
+            ownerName: resolvedOwnerName,
+            ownerClerkId: existingDeal.createdByClerkId || existingDeal.assignedToClerkId,
+            managerName: ownerManagerName,
+            workspaceManagerId: existingDeal.workspaceManagerId,
+            stage: existingDeal.stage,
+          }
+        });
+      }
+    }
+
+    const initialDealTimeline = [
+      {
+        activity: `Deal created by converting Lead "${lead.name}" (${lead.company || "No Company"}) with value ₹${dealValue.toLocaleString("en-IN")} by ${userName}`,
+        performedBy: userName,
+        timestamp: new Date(),
+      }
+    ];
+
+    const deal = await Deal.create({
+      name: dealName,
+      company: lead.company,
+      companyId: lead.companyId,
+      leadId: lead._id,
+      contactId: lead.contactId,
+      service: lead.service,
+      serviceId: lead.serviceId,
+      value: dealValue,
+      stage: stage,
+      priority: priority,
+      assignedTo: dealAssignedTo,
+      assignedToClerkId: dealAssignedToClerkId,
+      expectedCloseDate: expectedCloseDate || null,
+      notes: notes || lead.notes || "",
+      createdByClerkId: userClerkId,
+      workspaceManagerId: workspaceManagerId,
+      collaborators: lead.collaborators || [],
+      collaboratingWorkspaceIds: lead.collaboratingWorkspaceIds || [],
+      timeline: initialDealTimeline,
+    });
+
+    // Update Lead status to Converted & record in lead timeline
+    lead.status = "Converted";
+    lead.timeline.push({
+      activity: `Lead converted to Deal "${deal.name}" (Value: ₹${dealValue.toLocaleString("en-IN")}) by ${userName}`,
+      performedBy: userName,
+      timestamp: new Date(),
+    });
+    await lead.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Lead successfully converted to Deal",
+      data: {
+        deal,
+        lead,
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
