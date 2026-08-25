@@ -10,10 +10,11 @@ const getWorkspaceFilter = (req, extra = {}) => {
   const workspaceCond = [
     { workspaceManagerId: workspaceManagerId },
     { createdByClerkId: workspaceManagerId },
-    { sharedWithManagerIds: workspaceManagerId }
+    { sharedWithManagerIds: workspaceManagerId },
+    { collaboratingWorkspaceIds: workspaceManagerId },
   ];
 
-  const filter = { ...extra };
+  const clauses = [{ $or: workspaceCond }];
 
   if (req.user?.role === "employee") {
     const empMatch = [];
@@ -25,17 +26,28 @@ const getWorkspaceFilter = (req, extra = {}) => {
     if (req.user.clerkId) {
       empMatch.push({ createdByClerkId: req.user.clerkId });
       empMatch.push({ assignedToClerkId: req.user.clerkId });
+      empMatch.push({ "collaborators.clerkId": req.user.clerkId });
     }
     const empCond = empMatch.length > 0 ? empMatch : [{ assignedTo: "N/A" }];
-    filter.$and = [
-      { $or: workspaceCond },
-      { $or: empCond }
-    ];
-  } else {
-    filter.$or = workspaceCond;
+    clauses.push({ $or: empCond });
   }
 
-  return filter;
+  if (extra && Object.keys(extra).length > 0) {
+    if (extra.$or) {
+      clauses.push({ $or: extra.$or });
+      const rest = { ...extra };
+      delete rest.$or;
+      if (Object.keys(rest).length > 0) {
+        clauses.push(rest);
+      }
+    } else if (extra.$and) {
+      clauses.push(...extra.$and);
+    } else {
+      clauses.push(extra);
+    }
+  }
+
+  return { $and: clauses };
 };
 
 // @desc  Get KPI stats for dashboard cards (Workspace-scoped)
@@ -244,24 +256,25 @@ export const globalSearch = async (req, res, next) => {
       });
     }
 
-    const regex = new RegExp(q.trim(), "i");
+    const escapedQ = q.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(escapedQ, "i");
 
     const [leads, companies, deals, meetings, proposals] = await Promise.all([
       Lead.find(getWorkspaceFilter(req, {
-        $or: [{ name: regex }, { company: regex }, { email: regex }, { phone: regex }],
-      })).limit(5),
+        $or: [{ name: regex }, { company: regex }, { email: regex }, { phone: regex }, { service: regex }, { assignedTo: regex }],
+      })).limit(6),
       Company.find(getWorkspaceFilter(req, {
-        $or: [{ name: regex }, { primaryContact: regex }, { industry: regex }, { email: regex }],
-      })).limit(5),
+        $or: [{ name: regex }, { primaryContact: regex }, { industry: regex }, { email: regex }, { phone: regex }],
+      })).limit(6),
       Deal.find(getWorkspaceFilter(req, {
-        $or: [{ title: regex }, { company: regex }, { contactPerson: regex }],
-      })).limit(5),
+        $or: [{ name: regex }, { company: regex }, { service: regex }, { assignedTo: regex }],
+      })).limit(6),
       Meeting.find(getWorkspaceFilter(req, {
-        $or: [{ title: regex }, { company: regex }, { attendee: regex }],
-      })).limit(5),
+        $or: [{ title: regex }, { company: regex }, { attendee: regex }, { mode: regex }, { assignedToName: regex }],
+      })).limit(6),
       Proposal.find(getWorkspaceFilter(req, {
-        $or: [{ title: regex }, { client: regex }, { number: regex }],
-      })).limit(5),
+        $or: [{ number: regex }, { client: regex }, { service: regex }, { clientEmail: regex }, { assignedTo: regex }],
+      })).limit(6),
     ]);
 
     res.status(200).json({

@@ -9,6 +9,7 @@ import { SignedIn, SignedOut, UserButton, SignInButton, SignUpButton, useUser } 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/ThemeContext";
+import { useApi } from "@/lib/api";
 
 export function TopBar() {
   const { dark, toggleDark } = useTheme();
@@ -131,6 +132,7 @@ function MobileNav() {
 function SearchPalette({ onClose }) {
   const api = useApi();
   const navigate = useNavigate();
+  const { user } = useUser();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState({
@@ -140,6 +142,15 @@ function SearchPalette({ onClose }) {
     meetings: [],
     proposals: [],
   });
+
+  const isEmployee = user?.publicMetadata?.role === "employee";
+  const routes = {
+    leads: isEmployee ? "/employee/leads" : "/leads",
+    companies: isEmployee ? "/employee/companies" : "/companies",
+    deals: isEmployee ? "/employee/deals" : "/deals",
+    meetings: isEmployee ? "/employee/meetings" : "/meetings",
+    proposals: isEmployee ? "/employee/proposals" : "/proposals",
+  };
 
   // ESC key listener to close search
   useEffect(() => {
@@ -167,7 +178,7 @@ function SearchPalette({ onClose }) {
       } finally {
         setLoading(false);
       }
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [query, api]);
@@ -178,11 +189,11 @@ function SearchPalette({ onClose }) {
   };
 
   const totalResults =
-    results.leads.length +
-    results.companies.length +
-    results.deals.length +
-    results.meetings.length +
-    results.proposals.length;
+    (results.leads?.length || 0) +
+    (results.companies?.length || 0) +
+    (results.deals?.length || 0) +
+    (results.meetings?.length || 0) +
+    (results.proposals?.length || 0);
 
   return (
     <div
@@ -236,22 +247,22 @@ function SearchPalette({ onClose }) {
           ) : (
             <>
               {/* Companies */}
-              {results.companies.length > 0 && (
+              {results.companies?.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     <span className="flex items-center gap-1.5"><Building2 size={12} className="text-blue-500" /> Companies ({results.companies.length})</span>
-                    <button onClick={() => handleNavigate("/companies")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                    <button onClick={() => handleNavigate(routes.companies)} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
                   </div>
                   <div className="space-y-1 mt-1">
                     {results.companies.map((c) => (
                       <div
                         key={c._id}
-                        onClick={() => handleNavigate("/companies")}
+                        onClick={() => handleNavigate(routes.companies)}
                         className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
                       >
                         <div>
                           <div className="font-semibold text-foreground text-sm">{c.name}</div>
-                          <div className="text-[11px] text-muted-foreground">{c.industry || "General"} · {c.primaryContact || "No primary contact"}</div>
+                          <div className="text-[11px] text-muted-foreground">{[c.industry, c.primaryContact || c.phone || c.email].filter(Boolean).join(" · ") || "Company"}</div>
                         </div>
                         <span className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[10px] font-medium">Company</span>
                       </div>
@@ -261,22 +272,22 @@ function SearchPalette({ onClose }) {
               )}
 
               {/* Leads */}
-              {results.leads.length > 0 && (
+              {results.leads?.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     <span className="flex items-center gap-1.5"><Users size={12} className="text-emerald-500" /> Leads ({results.leads.length})</span>
-                    <button onClick={() => handleNavigate("/leads")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                    <button onClick={() => handleNavigate(routes.leads)} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
                   </div>
                   <div className="space-y-1 mt-1">
                     {results.leads.map((l) => (
                       <div
                         key={l._id}
-                        onClick={() => handleNavigate("/leads")}
+                        onClick={() => handleNavigate(routes.leads)}
                         className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
                       >
                         <div>
                           <div className="font-semibold text-foreground text-sm">{l.name}</div>
-                          <div className="text-[11px] text-muted-foreground">{l.company || "No company"} · {l.email || l.phone || "No contact"}</div>
+                          <div className="text-[11px] text-muted-foreground">{[l.company, l.email || l.phone].filter(Boolean).join(" · ") || "Lead"}</div>
                         </div>
                         <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-medium">{l.status || "Lead"}</span>
                       </div>
@@ -286,22 +297,22 @@ function SearchPalette({ onClose }) {
               )}
 
               {/* Deals */}
-              {results.deals.length > 0 && (
+              {results.deals?.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     <span className="flex items-center gap-1.5"><Handshake size={12} className="text-amber-500" /> Deals ({results.deals.length})</span>
-                    <button onClick={() => handleNavigate("/deals")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                    <button onClick={() => handleNavigate(routes.deals)} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
                   </div>
                   <div className="space-y-1 mt-1">
                     {results.deals.map((d) => (
                       <div
                         key={d._id}
-                        onClick={() => handleNavigate("/deals")}
+                        onClick={() => handleNavigate(routes.deals)}
                         className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
                       >
                         <div>
-                          <div className="font-semibold text-foreground text-sm">{d.title}</div>
-                          <div className="text-[11px] text-muted-foreground">{d.company || "No company"} · ₹{Number(d.value || 0).toLocaleString("en-IN")}</div>
+                          <div className="font-semibold text-foreground text-sm">{d.name || d.title || "Untitled Deal"}</div>
+                          <div className="text-[11px] text-muted-foreground">{[d.company, d.value ? `₹${Number(d.value).toLocaleString("en-IN")}` : null].filter(Boolean).join(" · ") || "Deal"}</div>
                         </div>
                         <span className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-medium">{d.stage || "Deal"}</span>
                       </div>
@@ -311,22 +322,22 @@ function SearchPalette({ onClose }) {
               )}
 
               {/* Meetings */}
-              {results.meetings.length > 0 && (
+              {results.meetings?.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     <span className="flex items-center gap-1.5"><Calendar size={12} className="text-violet-500" /> Meetings ({results.meetings.length})</span>
-                    <button onClick={() => handleNavigate("/meetings")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                    <button onClick={() => handleNavigate(routes.meetings)} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
                   </div>
                   <div className="space-y-1 mt-1">
                     {results.meetings.map((m) => (
                       <div
                         key={m._id}
-                        onClick={() => handleNavigate("/meetings")}
+                        onClick={() => handleNavigate(routes.meetings)}
                         className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
                       >
                         <div>
-                          <div className="font-semibold text-foreground text-sm">{m.title}</div>
-                          <div className="text-[11px] text-muted-foreground">{m.company || "No company"} · {m.attendee || m.date || "Scheduled"}</div>
+                          <div className="font-semibold text-foreground text-sm">{m.title || "Untitled Meeting"}</div>
+                          <div className="text-[11px] text-muted-foreground">{[m.company, m.attendee || (m.date ? new Date(m.date).toLocaleDateString() : null)].filter(Boolean).join(" · ") || "Meeting"}</div>
                         </div>
                         <span className="rounded-full bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 text-[10px] font-medium">{m.status || "Meeting"}</span>
                       </div>
@@ -336,22 +347,22 @@ function SearchPalette({ onClose }) {
               )}
 
               {/* Proposals */}
-              {results.proposals.length > 0 && (
+              {results.proposals?.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     <span className="flex items-center gap-1.5"><FileText size={12} className="text-rose-500" /> Proposals ({results.proposals.length})</span>
-                    <button onClick={() => handleNavigate("/proposals")} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
+                    <button onClick={() => handleNavigate(routes.proposals)} className="text-indigo-600 hover:underline flex items-center gap-1">View all <ArrowRight size={10} /></button>
                   </div>
                   <div className="space-y-1 mt-1">
                     {results.proposals.map((p) => (
                       <div
                         key={p._id}
-                        onClick={() => handleNavigate("/proposals")}
+                        onClick={() => handleNavigate(routes.proposals)}
                         className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted cursor-pointer transition"
                       >
                         <div>
-                          <div className="font-semibold text-foreground text-sm">{p.title}</div>
-                          <div className="text-[11px] text-muted-foreground">{p.companyName || "No company"} · {p.proposalNumber || "Proposal"}</div>
+                          <div className="font-semibold text-foreground text-sm">{p.title || p.number || p.client || p.service || "Proposal"}</div>
+                          <div className="text-[11px] text-muted-foreground">{[p.client || p.companyName, p.number, p.value ? `₹${Number(p.value).toLocaleString("en-IN")}` : null].filter(Boolean).join(" · ") || "Proposal"}</div>
                         </div>
                         <span className="rounded-full bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 text-[10px] font-medium">{p.status || "Proposal"}</span>
                       </div>
