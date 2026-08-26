@@ -12,553 +12,840 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  Zap,
-  TrendingUp,
   Building2,
   Users,
-  Handshake,
-  Video,
   FileText,
   CheckCircle2,
-  Globe,
-  Briefcase,
-  ChevronRight,
-  BarChart3,
-  Layers,
   LayoutDashboard,
-  Clock,
-  IndianRupee,
   Star,
   Check,
+  LayoutGrid,
+  Calendar,
+  PhoneCall,
+  X,
+  ChevronRight,
+  Compass,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import crmHeroUi from "@/assets/Gemini_Generated_Image_jal9z9jal9z9jal9.png";
 
 export const Route = createFileRoute("/landing")({
   component: LandingPage,
 });
 
 export function LandingPage() {
-  const [activeTab, setActiveTab] = useState("hero"); // "hero" | "features"
-  const [activeFeature, setActiveFeature] = useState("leads");
-  const { user, isSignedIn } = useUser();
+  const { isSignedIn } = useUser();
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+  const [demoFormSubmitted, setDemoFormSubmitted] = useState(false);
+  const [demoData, setDemoData] = useState({
+    name: "",
+    email: "",
+    company: "",
+    service: "DGFT Advisory & Licensing",
+    notes: "",
+  });
 
-  const featureModules = [
+  const handleDemoSubmit = (e) => {
+    e.preventDefault();
+    setDemoFormSubmitted(true);
+    setTimeout(() => {
+      setDemoFormSubmitted(false);
+      setIsDemoModalOpen(false);
+      setDemoData({
+        name: "",
+        email: "",
+        company: "",
+        service: "DGFT Advisory & Licensing",
+        notes: "",
+      });
+    }, 2500);
+  };
+
+  // 6 Core Native CRM Features (Image 2 style, no AI)
+  const crmFeatures = [
+    {
+      id: "pipeline",
+      title: "Visual Workspaces",
+      icon: LayoutGrid,
+      description:
+        "Organise projects into boards, lists, and timelines. Switch views without losing context — your trade team stays in sync.",
+      link: "/deals",
+      badge: "Deals & Stages",
+    },
     {
       id: "leads",
-      title: "Leads & Job Tracking",
+      title: "Lead & Job Tracking",
       icon: Users,
-      badge: "Real-time Status",
-      tone: "from-indigo-600 to-blue-600",
       description:
-        "Capture, organize, and assign export-import leads. Inline editable status selectors allow status updates in a single click without opening forms.",
-      highlights: [
-        "Inline Status Switching (New, Contacted, Interested, Converted)",
-        "Service & Job Assignment (DGFT Advisory, SEZ, Customs)",
-        "Instant CSV Export & Lead Import Support",
-      ],
-      previewStats: [
-        { label: "Active Leads", val: "1,240+" },
-        { label: "Conversion Rate", val: "34.2%" },
-      ],
+        "Capture global buyer inquiries and assign DGFT, Customs, or SEZ consultation jobs. Inline status switching lets you update leads in one click.",
+      link: "/leads",
+      badge: "One-Click Status",
     },
     {
-      id: "contacts",
-      title: "Company Directory & Contacts",
+      id: "directory",
+      title: "Enterprise Directory",
       icon: Building2,
-      badge: "Executive Directory",
-      tone: "from-emerald-600 to-teal-600",
       description:
-        "Manage multiple key decision makers per company account. Filter contacts by company name, mobile number, designation, and direct call/email triggers.",
-      highlights: [
-        "Multiple Contacts per Company Account",
-        "Company Filter Dropdown with Dynamic Counts",
-        "One-click Phone & Email Integration",
-      ],
-      previewStats: [
-        { label: "Company Accounts", val: "450+" },
-        { label: "Key Executives", val: "1,890" },
-      ],
+        "Manage multiple key decision-makers per company account. Access GSTIN, IEC codes, executive designations, and one-click direct phone/email triggers.",
+      link: "/companies",
+      badge: "Multi-Contact CRM",
     },
     {
-      id: "deals",
-      title: "Trade Pipeline & Proposals",
-      icon: Handshake,
-      badge: "INR Revenue Flow",
-      tone: "from-amber-600 to-orange-600",
+      id: "proposals",
+      title: "Itemized Proposals",
+      icon: FileText,
       description:
-        "Visual Kanban trade pipeline with Rupee (₹) currency metrics. Generate compliant trade proposals with valid-till dates and approval tracking.",
-      highlights: [
-        "Stage Tracking from Discovery to Closed-Won",
-        "Full Rupee (₹) Currency Localization",
-        "Instant Proposal Template Builder",
-      ],
-      previewStats: [
-        { label: "Pipeline Value", val: "₹14.8Cr" },
-        { label: "Win Rate", val: "68%" },
-      ],
+        "Generate professional trade proposals with valid-till dates, custom itemized service pricing, scope of work, and instant Word (.docx) export.",
+      link: "/proposals",
+      badge: "Docx & PDF Ready",
     },
     {
       id: "meetings",
-      title: "Smart Meetings Scheduler",
-      icon: Video,
-      badge: "Virtual & On-site",
-      tone: "from-violet-600 to-purple-600",
+      title: "Consultation Scheduler",
+      icon: Calendar,
       description:
-        "Schedule discovery calls and technical consultations. Interactive drawer details, video link integrations, and automated status logging.",
-      highlights: [
-        "Google Meet & Teams Link Integration",
-        "Status Badges (Scheduled, Completed, Cancelled)",
-        "Slide-out Meeting Detail Inspector",
-      ],
-      previewStats: [
-        { label: "Meetings Completed", val: "380+" },
-        { label: "Time Saved", val: "15 hrs/wk" },
-      ],
+        "Schedule discovery calls and technical consultations with Google Meet and Teams integration. Log meeting notes and agendas directly into accounts.",
+      link: "/meetings",
+      badge: "Meet & Teams Sync",
+    },
+    {
+      id: "services",
+      title: "Advisory Services Catalog",
+      icon: ShieldCheck,
+      description:
+        "Standardize advisory packages for Advance Authorisation, EPCG, RoDTEP, SEZ compliance, and Customs clearance with pre-configured fee templates.",
+      link: "/services",
+      badge: "DGFT & Customs",
     },
   ];
 
+  const stats = [
+    { label: "Trade Volume Managed", val: "₹50Cr+", change: "+42% YoY" },
+    { label: "Lead Conversions", val: "3.4x Faster", change: "Verified" },
+    { label: "Compliance Accuracy", val: "99.8%", change: "DGFT Ready" },
+    { label: "Active Enterprises", val: "250+ Co", change: "Pan-India" },
+  ];
+
   return (
-    <div className="min-h-screen w-full bg-[#FDFBF7] text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Background Decorative Soft Warm Glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-indigo-100/60 blur-[140px]" />
-        <div className="absolute top-1/3 -right-40 h-[600px] w-[600px] rounded-full bg-amber-100/50 blur-[160px]" />
-        <div className="absolute -bottom-40 left-1/3 h-[500px] w-[500px] rounded-full bg-emerald-100/40 blur-[150px]" />
+    <div className="min-h-screen w-full bg-[#FAF7F2] text-[#191919] font-sans antialiased selection:bg-[#FF7A00] selection:text-white relative overflow-x-hidden">
+      {/* Soft ambient background glow blobs matching Reference Design */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div className="absolute -top-32 -right-32 w-[650px] h-[650px] rounded-full bg-[#FCE8D5]/60 blur-[130px]" />
+        <div className="absolute top-1/2 -left-48 w-[600px] h-[600px] rounded-full bg-[#F6DFC8]/50 blur-[150px]" />
+        <div className="absolute -bottom-40 right-1/4 w-[550px] h-[550px] rounded-full bg-[#FCE8D5]/50 blur-[140px]" />
       </div>
 
-      {/* Top Header Navigation */}
-      <header className="sticky top-0 z-50 border-b border-amber-200/50 bg-[#FDFBF7]/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 shadow-md shadow-indigo-600/20">
-              <Sparkles className="h-5 w-5 text-white" />
+      {/* ======================= TOP NAVIGATION BAR ======================= */}
+      <header className="sticky top-0 z-50 bg-[#FAF7F2]/90 backdrop-blur-md border-b border-[#EDE4D8]/70">
+        <div className="max-w-7xl mx-auto flex h-20 items-center justify-between px-4 sm:px-8">
+          {/* Brand Logo */}
+          <Link to="/" className="flex items-center gap-3 group">
+            {/* Geometric Spiral / Flower Star Logo */}
+            <div className="w-8 h-8 text-black flex items-center justify-center transition-transform duration-300 group-hover:rotate-45">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-7 h-7 text-black"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2a5 5 0 0 0 5 5 5 5 0 0 0 5-5" />
+                <path d="M22 12a5 5 0 0 0-5 5 5 5 0 0 0 5 5" />
+                <path d="M12 22a5 5 0 0 0-5-5 5 5 0 0 0-5 5" />
+                <path d="M2 12a5 5 0 0 0 5-5 5 5 0 0 0-5-5" />
+              </svg>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold tracking-tight text-slate-900">
-                  EXIM NEXUS
-                </span>
-                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
-                  CRM
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Export-Import Advisory Platform
-              </p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xl font-extrabold tracking-tight text-black">
+                EXIM NEXUS
+              </span>
             </div>
-          </div>
+          </Link>
 
-          {/* Navigation View Switcher (Page 1 vs Page 2) */}
-          <div className="hidden md:flex items-center gap-1 rounded-full border border-amber-200/80 bg-white p-1.5 shadow-sm">
+          {/* Center Navigation Links */}
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-700">
+            <a href="#hero" className="hover:text-black transition-colors">
+              Platform
+            </a>
+            <a href="#features" className="hover:text-black transition-colors">
+              Resources
+            </a>
+            <a href="#solutions" className="hover:text-black transition-colors">
+              Solution
+            </a>
             <button
-              onClick={() => setActiveTab("hero")}
-              className={cn(
-                "flex items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold transition-all",
-                activeTab === "hero"
-                  ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-              )}
+              onClick={() => setIsDemoModalOpen(true)}
+              className="hover:text-black transition-colors text-left"
             >
-              <Globe size={14} />
-              <span>Page 1: Hero Overview</span>
+              Pricing
             </button>
-            <button
-              onClick={() => setActiveTab("features")}
-              className={cn(
-                "flex items-center gap-2 rounded-full px-5 py-2 text-xs font-semibold transition-all",
-                activeTab === "features"
-                  ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-              )}
-            >
-              <Layers size={14} />
-              <span>Page 2: Product Showcase</span>
-            </button>
-          </div>
+          </nav>
 
-          {/* Auth Action Buttons */}
+          {/* Right Action Buttons */}
           <div className="flex items-center gap-3">
             <SignedIn>
-              <div className="flex items-center gap-3">
-                <Link
-                  to="/"
-                  className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition"
-                >
-                  <LayoutDashboard size={14} />
-                  <span>Go to CRM Dashboard</span>
-                </Link>
-                <div className="flex items-center gap-2 rounded-xl border border-amber-200/80 bg-white px-3 py-1.5 shadow-sm">
-                  <UserButton showName showAvatar />
-                </div>
+              <Link
+                to="/"
+                className="hidden sm:inline-flex items-center gap-2 rounded-full bg-[#18181B] text-white px-5 py-2.5 text-xs font-semibold hover:bg-black transition shadow-sm"
+              >
+                <LayoutDashboard size={14} />
+                <span>Go to Dashboard</span>
+              </Link>
+              <div className="flex items-center gap-2 rounded-full border border-[#EDE4D8] bg-white px-2 py-1 shadow-sm">
+                <UserButton showName={false} />
               </div>
             </SignedIn>
 
             <SignedOut>
-              <div className="flex items-center gap-2">
-                <SignInButton mode="modal">
-                  <button className="rounded-xl border border-slate-300 bg-white px-4.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900">
-                    Sign In
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4.5 py-2 text-xs font-bold text-white shadow-md shadow-indigo-600/20 hover:shadow-lg transition hover:scale-[1.02]">
-                    Get Started Free
-                  </button>
-                </SignUpButton>
-              </div>
+              <button
+                onClick={() => setIsDemoModalOpen(true)}
+                className="hidden sm:inline-flex items-center justify-center rounded-full border border-slate-300/80 bg-white px-5 py-2 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 hover:border-slate-400"
+              >
+                Book demo
+              </button>
+              <SignInButton mode="modal">
+                <button className="inline-flex items-center gap-1.5 rounded-full bg-[#111827] px-5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-black hover:scale-[1.02]">
+                  <span>Get Started</span>
+                  <ArrowRight size={13} />
+                </button>
+              </SignInButton>
             </SignedOut>
           </div>
         </div>
-
-        {/* Mobile Sub-Page Selector */}
-        <div className="flex md:hidden border-t border-amber-200/60 bg-white px-4 py-2 gap-2">
-          <button
-            onClick={() => setActiveTab("hero")}
-            className={cn(
-              "flex-1 py-1.5 text-center text-xs font-bold rounded-lg transition",
-              activeTab === "hero" ? "bg-indigo-600 text-white" : "text-slate-600 bg-slate-100"
-            )}
-          >
-            Page 1: Hero
-          </button>
-          <button
-            onClick={() => setActiveTab("features")}
-            className={cn(
-              "flex-1 py-1.5 text-center text-xs font-bold rounded-lg transition",
-              activeTab === "features" ? "bg-indigo-600 text-white" : "text-slate-600 bg-slate-100"
-            )}
-          >
-            Page 2: Product Showcase
-          </button>
-        </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        {/* PAGE 1: HERO OVERVIEW */}
-        {activeTab === "hero" && (
-          <div className="space-y-16 animate-fade-in">
-            {/* Main Hero Banner */}
-            <div className="text-center max-w-3xl mx-auto space-y-6 pt-4 sm:pt-6">
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white/90 px-4 py-1.5 text-xs font-semibold text-indigo-800 shadow-sm backdrop-blur-md">
-                <Sparkles size={14} className="text-indigo-600 animate-pulse" />
-                <span>EXIM NEXUS Trade CRM v1.0</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      {/* ======================= HERO SECTION (IMAGE 1) ======================= */}
+      <section id="hero" className="relative pt-8 pb-16 sm:pt-14 sm:pb-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+            {/* Left Column: Headlines & CTAs */}
+            <div className="lg:col-span-5 space-y-7 text-left">
+              {/* Badge: New Feature Announcement */}
+              <div className="inline-flex items-center gap-2.5 rounded-full bg-[#F5ECE0] border border-[#E9DAC8] px-3.5 py-1 text-xs font-semibold text-slate-800 shadow-sm">
+                <span className="flex items-center gap-1 rounded-full bg-[#E5D4BE] px-2 py-0.5 text-[11px] font-bold text-slate-900">
+                  <Star size={11} className="fill-slate-900 text-slate-900" /> New
+                </span>
+                <span className="text-slate-700 font-medium">
+                  Trade CRM Platform is live
+                </span>
+                <ChevronRight size={13} className="text-slate-500" />
               </div>
 
-              {/* Headline */}
-              <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-slate-900 leading-tight sm:leading-[1.1]">
-                Transform Global Export & Import{" "}
-                <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 bg-clip-text text-transparent">
-                  Business Pipelines
-                </span>
+              {/* Huge Main Headline */}
+              <h1 className="text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight text-slate-950 leading-[1.12]">
+                Where teams create and{" "}
+                <span className="text-[#FF7A00]">achieve</span> more.
               </h1>
 
-              {/* Description */}
-              <p className="text-base sm:text-lg text-slate-600 leading-relaxed font-normal max-w-2xl mx-auto">
-                A modern trade advisory CRM designed for Indian exporters and importers. Manage buyer leads, track multi-million rupee (₹) trade contracts, schedule consultations, and generate compliant trade proposals.
+              {/* Subtitle */}
+              <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-lg font-normal">
+                EXIM NEXUS is the all-in-one workspace that helps modern trade teams plan,
+                collaborate, and deliver their best work faster.
               </p>
 
-              {/* Call-to-Action Group */}
-              <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+              {/* CTA Buttons */}
+              <div className="flex flex-wrap items-center gap-3.5 pt-1">
                 <SignedIn>
                   <Link
                     to="/"
-                    className="inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 px-7 py-3.5 text-sm font-bold text-white shadow-xl shadow-indigo-600/25 transition hover:scale-[1.02] hover:shadow-2xl"
+                    className="inline-flex items-center gap-2 rounded-full bg-[#111827] text-white px-7 py-3.5 text-sm font-semibold shadow-md transition hover:bg-black hover:scale-[1.02]"
                   >
                     <span>Launch CRM Dashboard</span>
-                    <ArrowRight size={16} />
+                    <ArrowRight size={15} />
                   </Link>
                 </SignedIn>
 
                 <SignedOut>
                   <SignUpButton mode="modal">
-                    <button className="inline-flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 px-7 py-3.5 text-sm font-bold text-white shadow-xl shadow-indigo-600/25 transition hover:scale-[1.02] hover:shadow-2xl">
-                      <span>Get Started with Clerk</span>
+                    <button className="inline-flex items-center gap-2 rounded-full bg-[#111827] text-white px-7 py-3.5 text-sm font-semibold shadow-md transition hover:bg-black hover:scale-[1.02]">
+                      <span>Start for free</span>
+                      <ArrowRight size={15} />
+                    </button>
+                  </SignUpButton>
+                </SignedOut>
+
+                <button
+                  onClick={() => setIsDemoModalOpen(true)}
+                  className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 hover:border-slate-400"
+                >
+                  Talk to sales
+                </button>
+              </div>
+
+              {/* Social Proof Bar */}
+              <div className="pt-2 flex items-center gap-4">
+                {/* Overlapping User Avatars */}
+                <div className="flex -space-x-2.5 overflow-hidden">
+                  <img
+                    className="inline-block h-9 w-9 rounded-full ring-2 ring-white object-cover shadow-sm"
+                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
+                    alt="User"
+                  />
+                  <img
+                    className="inline-block h-9 w-9 rounded-full ring-2 ring-white object-cover shadow-sm"
+                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80"
+                    alt="User"
+                  />
+                  <img
+                    className="inline-block h-9 w-9 rounded-full ring-2 ring-white object-cover shadow-sm"
+                    src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&auto=format&fit=crop&q=80"
+                    alt="User"
+                  />
+                  <img
+                    className="inline-block h-9 w-9 rounded-full ring-2 ring-white object-cover shadow-sm"
+                    src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80"
+                    alt="User"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-0.5 text-amber-500">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} size={14} className="fill-amber-500 text-amber-500" />
+                    ))}
+                  </div>
+                  <span className="text-xs font-semibold text-slate-700 mt-0.5">
+                    Used by 1,000+ people
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: CRM Dashboard Mockup (Matching Image 1) */}
+            <div className="lg:col-span-7 relative">
+              {/* Background decorative curved container glow */}
+              <div className="absolute -inset-2 rounded-[2.5rem] bg-gradient-to-tr from-amber-200/40 via-orange-100/30 to-amber-100/20 blur-xl -z-10" />
+
+              <div className="relative rounded-2xl sm:rounded-3xl border border-[#E8DFC8] bg-white shadow-2xl shadow-stone-300/40 overflow-hidden">
+                {/* Browser top-bar frame */}
+                <div className="flex items-center justify-between border-b border-slate-100 bg-[#FAFAFA] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
+                    <span className="h-3 w-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
+                    <span className="h-3 w-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
+                    <span className="ml-3 text-[11px] font-mono text-slate-400">
+                      app.exim-nexus.internal / workspace
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Live Sync Active
+                    </span>
+                  </div>
+                </div>
+
+                {/* Embedded Uploaded CRM Dashboard Screenshot */}
+                <div className="relative bg-white w-full">
+                  <img
+                    src={crmHeroUi}
+                    alt="EXIM CRM Dashboard Interface"
+                    className="w-full h-auto object-cover object-left-top block select-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ======================= STATS / TRUST METRICS STRIP ======================= */}
+      <section id="stats" className="border-y border-[#EDE4D8]/80 bg-white/60 py-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
+            {stats.map((s) => (
+              <div key={s.label} className="space-y-1">
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                  {s.val}
+                </div>
+                <div className="text-xs sm:text-sm font-semibold text-slate-700">
+                  {s.label}
+                </div>
+                <div className="text-[11px] font-medium text-[#FF7A00]">
+                  {s.change}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ======================= FEATURES GRID SECTION (IMAGE 2) ======================= */}
+      <section id="features" className="py-20 sm:py-28 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          {/* Section Header */}
+          <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-950">
+              Built for modern <span className="text-[#FF7A00]">teams</span>
+            </h2>
+            <p className="text-base sm:text-lg text-slate-600 font-normal leading-relaxed">
+              EXIM NEXUS brings together DGFT advisory, buyer pipeline management, trade documentation, and meetings — so your team can focus on delivering great work instead of managing tools.
+            </p>
+          </div>
+
+          {/* 6 Feature Cards Grid (3 Columns x 2 Rows) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7">
+            {crmFeatures.map((f) => (
+              <div
+                key={f.id}
+                className="group relative rounded-3xl border border-[#EDE4D8] bg-white p-7 sm:p-8 transition-all duration-300 hover:border-orange-300 hover:shadow-xl hover:shadow-orange-950/5 hover:-translate-y-1 flex flex-col justify-between"
+              >
+                <div>
+                  {/* Top Orange Outline Icon */}
+                  <div className="inline-flex items-center justify-center p-3 rounded-2xl border border-orange-200/90 bg-orange-50/70 text-[#FF7A00] mb-6 shadow-sm group-hover:scale-105 transition-transform">
+                    <f.icon size={22} strokeWidth={2} />
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-xl font-bold text-slate-950 mb-3 tracking-tight">
+                    {f.title}
+                  </h3>
+
+                  {/* Description */}
+                  <p className="text-sm text-slate-600 leading-relaxed font-normal">
+                    {f.description}
+                  </p>
+                </div>
+
+                {/* Bottom Card Footer */}
+                <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {f.badge}
+                  </span>
+                  <SignedIn>
+                    <Link
+                      to={f.link}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-orange-700 transition"
+                    >
+                      <span>Explore</span>
+                      <ChevronRight size={13} />
+                    </Link>
+                  </SignedIn>
+                  <SignedOut>
+                    <SignUpButton mode="modal">
+                      <button className="inline-flex items-center gap-1 text-xs font-bold text-[#FF7A00] hover:text-orange-700 transition">
+                        <span>Get Started</span>
+                        <ChevronRight size={13} />
+                      </button>
+                    </SignUpButton>
+                  </SignedOut>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ======================= SOLUTIONS / ADVISORY WORKFLOW ======================= */}
+      <section id="solutions" className="py-16 sm:py-24 bg-white/70 border-t border-[#EDE4D8]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="rounded-3xl border border-[#EDE4D8] bg-[#FAF7F2] p-8 sm:p-12 shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+              <div className="lg:col-span-6 space-y-6">
+                <div className="inline-flex items-center gap-2 rounded-full bg-orange-100/70 border border-orange-200 px-3.5 py-1 text-xs font-bold text-orange-800">
+                  <Compass size={13} />
+                  <span>End-to-End Trade Lifecycle</span>
+                </div>
+                <h3 className="text-2xl sm:text-4xl font-extrabold text-slate-950 tracking-tight">
+                  Seamless DGFT, Customs & International Trade Execution
+                </h3>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal">
+                  Whether assisting first-time exporters or managing multi-crore EPCG authorizations, EXIM NEXUS unifies all advisory touchpoints under one reliable system.
+                </p>
+
+                <div className="space-y-3 pt-2">
+                  {[
+                    "DGFT Schemes (EPCG, Advance Authorisation, RoDTEP, RoSCTL)",
+                    "Customs Clearance & Duty Drawback management",
+                    "SEZ / EOU Unit onboarding and compliance filings",
+                    "Executive meetings with instant calendar sync and minutes logging",
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 text-sm text-slate-800 font-medium">
+                      <CheckCircle2 size={17} className="text-[#FF7A00] shrink-0" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-4 flex items-center gap-3">
+                  <button
+                    onClick={() => setIsDemoModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full bg-[#111827] text-white px-6 py-3 text-xs font-semibold shadow-md transition hover:bg-black"
+                  >
+                    <span>Schedule Free Demo Consultation</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Visual Workflow Steps Card */}
+              <div className="lg:col-span-6 space-y-3.5">
+                {[
+                  {
+                    step: "01",
+                    title: "Lead Ingestion & Qualification",
+                    desc: "Capture trade leads from international buyer queries and qualify service requirements in seconds.",
+                  },
+                  {
+                    step: "02",
+                    title: "Itemized Proposal & Quotation",
+                    desc: "Generate professional Word (.docx) proposals with custom fee structures and terms of trade.",
+                  },
+                  {
+                    step: "03",
+                    title: "Pipeline & Contract Execution",
+                    desc: "Track stage progression in real-time until closed-won, with localized INR revenue realization metrics.",
+                  },
+                ].map((s) => (
+                  <div
+                    key={s.step}
+                    className="rounded-2xl border border-[#EDE4D8] bg-white p-5 shadow-sm flex items-start gap-4"
+                  >
+                    <div className="h-10 w-10 shrink-0 rounded-xl bg-orange-50 border border-orange-200 text-[#FF7A00] font-extrabold text-sm flex items-center justify-center">
+                      {s.step}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">{s.title}</h4>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">{s.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ======================= CTA BANNER ======================= */}
+      <section className="py-16 sm:py-20 relative">
+        <div className="max-w-5xl mx-auto px-4 sm:px-8">
+          <div className="relative rounded-3xl bg-[#111827] text-white p-8 sm:p-14 text-center overflow-hidden shadow-2xl">
+            {/* Background ambient light */}
+            <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-[#FF7A00]/20 blur-[100px] pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-indigo-500/20 blur-[100px] pointer-events-none" />
+
+            <div className="relative z-10 space-y-6 max-w-2xl mx-auto">
+              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+                Ready to accelerate your global trade operations?
+              </h2>
+              <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                Join forward-thinking exporters, importers, and trade advisory firms using EXIM NEXUS.
+              </p>
+
+              <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+                <SignedIn>
+                  <Link
+                    to="/"
+                    className="inline-flex items-center gap-2 rounded-full bg-[#FF7A00] text-white px-7 py-3.5 text-sm font-bold shadow-lg shadow-orange-500/25 hover:bg-orange-600 transition hover:scale-[1.02]"
+                  >
+                    <span>Open CRM Dashboard</span>
+                    <ArrowRight size={16} />
+                  </Link>
+                </SignedIn>
+                <SignedOut>
+                  <SignUpButton mode="modal">
+                    <button className="inline-flex items-center gap-2 rounded-full bg-[#FF7A00] text-white px-7 py-3.5 text-sm font-bold shadow-lg shadow-orange-500/25 hover:bg-orange-600 transition hover:scale-[1.02]">
+                      <span>Get Started for Free</span>
                       <ArrowRight size={16} />
                     </button>
                   </SignUpButton>
                 </SignedOut>
 
                 <button
-                  onClick={() => setActiveTab("features")}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3.5 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition shadow-sm"
+                  onClick={() => setIsDemoModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800/80 px-6 py-3.5 text-sm font-semibold text-white hover:bg-slate-800 transition"
                 >
-                  <BarChart3 size={16} className="text-indigo-600" />
-                  <span>Explore Product Hub</span>
+                  <PhoneCall size={14} />
+                  <span>Book Consultation</span>
                 </button>
-              </div>
-
-              {/* Calm Trust Metrics Bar */}
-              <div className="pt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-left max-w-4xl mx-auto">
-                {[
-                  { label: "Trade Volume Managed", val: "₹50Cr+", icon: IndianRupee },
-                  { label: "Lead Conversions", val: "3.4x Faster", icon: TrendingUp },
-                  { label: "Trade Compliance", val: "99.8%", icon: ShieldCheck },
-                  { label: "Active Enterprises", val: "250+ Co", icon: Building2 },
-                ].map((m) => (
-                  <div
-                    key={m.label}
-                    className="rounded-2xl border border-amber-200/60 bg-white/90 p-4 shadow-sm backdrop-blur-md"
-                  >
-                    <div className="flex items-center gap-2 text-indigo-600">
-                      <m.icon size={16} />
-                      <span className="text-xs font-semibold text-slate-500">
-                        {m.label}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xl font-extrabold text-slate-900 tracking-tight">
-                      {m.val}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Interactive Clean Mockup UI Showcase */}
-            <div className="relative rounded-3xl border border-amber-200/70 bg-white p-4 sm:p-6 shadow-2xl shadow-indigo-100/60 max-w-5xl mx-auto overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-rose-400" />
-                  <span className="h-3 w-3 rounded-full bg-amber-400" />
-                  <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                  <span className="ml-2 text-xs font-mono text-slate-500 font-medium">
-                    exim-nexus-crm.internal / dashboard-preview
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                    Live System Active
-                  </span>
-                </div>
-              </div>
-
-              {/* Clean Mockup Dashboard Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Mockup 1: Leads */}
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-600 font-bold">
-                    <span>Leads Pipeline</span>
-                    <span className="text-indigo-600">120 Active</span>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { name: "Tata Exports", service: "DGFT Advisory", status: "Converted", price: "₹4.5L" },
-                      { name: "Bajaj Global", service: "SEZ Clearance", status: "Interested", price: "₹2.8L" },
-                      { name: "Wipro Customs", service: "Customs Audit", status: "New", price: "₹1.2L" },
-                    ].map((l) => (
-                      <div
-                        key={l.name}
-                        className="flex items-center justify-between rounded-xl bg-white p-2.5 border border-slate-200/70 shadow-sm"
-                      >
-                        <div>
-                          <div className="text-xs font-bold text-slate-900">{l.name}</div>
-                          <div className="text-[10px] text-slate-500 font-medium">{l.service}</div>
-                        </div>
-                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
-                          {l.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Mockup 2: Meetings */}
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-600 font-bold">
-                    <span>Upcoming Meetings</span>
-                    <span className="text-emerald-600">Today</span>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { title: "DGFT Advisory Review", time: "10:30 AM", type: "Google Meet" },
-                      { title: "Q3 Trade Consultation", time: "02:00 PM", type: "In-Person" },
-                      { title: "SEZ Compliance Briefing", time: "04:30 PM", type: "Teams" },
-                    ].map((m) => (
-                      <div
-                        key={m.title}
-                        className="flex items-center gap-2.5 rounded-xl bg-white p-2.5 border border-slate-200/70 shadow-sm"
-                      >
-                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700 font-bold">
-                          <Video size={13} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-xs font-bold text-slate-900">
-                            {m.title}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-medium">
-                            {m.time} · {m.type}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Mockup 3: Revenue */}
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-600 font-bold">
-                    <span>Monthly Revenue (₹)</span>
-                    <span className="text-emerald-600 font-bold">+18.4%</span>
-                  </div>
-                  <div className="p-3 rounded-xl bg-white border border-slate-200/70 shadow-sm text-center space-y-2">
-                    <div className="text-2xl font-extrabold text-slate-900">₹48,50,000</div>
-                    <div className="text-[11px] text-slate-500 font-medium">Closed & Realized Contracts</div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-gradient-to-r from-indigo-600 to-violet-600 h-full w-[78%]" />
-                    </div>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-slate-500 font-semibold px-1">
-                    <span>Target: ₹60L</span>
-                    <span className="text-indigo-600">78% Achieved</span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      </section>
 
-        {/* PAGE 2: PRODUCT SHOWCASE SECTION */}
-        {activeTab === "features" && (
-          <div className="space-y-12 animate-fade-in pt-4">
-            <div className="text-center max-w-2xl mx-auto space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3.5 py-1 text-xs font-bold text-indigo-700 shadow-sm">
-                <Layers size={14} />
-                <span>Page 2: Core Capability Modules</span>
+      {/* ======================= COMPREHENSIVE FOOTER ======================= */}
+      <footer className="border-t border-[#EDE4D8] bg-[#FAF7F2] pt-14 pb-10 text-slate-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
+            {/* Brand Column */}
+            <div className="col-span-2 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 text-black flex items-center justify-center">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="w-6 h-6 text-black"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 2a5 5 0 0 0 5 5 5 5 0 0 0 5-5" />
+                    <path d="M22 12a5 5 0 0 0-5 5 5 5 0 0 0 5 5" />
+                    <path d="M12 22a5 5 0 0 0-5-5 5 5 0 0 0-5 5" />
+                    <path d="M2 12a5 5 0 0 0 5-5 5 5 0 0 0-5-5" />
+                  </svg>
+                </div>
+                <span className="text-lg font-extrabold tracking-tight text-slate-900">
+                  EXIM NEXUS
+                </span>
               </div>
-              <h2 className="text-3xl sm:text-5xl font-bold tracking-tight text-slate-900">
-                Engineered for Global Trade Advisory
-              </h2>
-              <p className="text-slate-600 text-sm sm:text-base">
-                Explore the key CRM modules built specifically for export-import operations.
+              <p className="text-xs text-slate-600 leading-relaxed max-w-sm">
+                The comprehensive trade advisory CRM and operational workspace designed specifically for export-import teams and DGFT consultants.
               </p>
+              <div className="pt-2 flex items-center gap-3 text-xs text-slate-500 font-medium">
+                <span className="inline-flex items-center gap-1 text-emerald-600">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  All Systems Operational
+                </span>
+                <span>•</span>
+                <span>v1.2 Production</span>
+              </div>
             </div>
 
-            {/* Module Selector Tabs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {featureModules.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => setActiveFeature(m.id)}
-                  className={cn(
-                    "flex flex-col items-start gap-2.5 rounded-2xl border p-4 text-left transition-all",
-                    activeFeature === m.id
-                      ? "border-indigo-500 bg-white shadow-xl shadow-indigo-100 ring-2 ring-indigo-500/20"
-                      : "border-amber-200/60 bg-white/70 hover:bg-white hover:shadow-md"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br text-white shadow-md",
-                      m.tone
-                    )}
+            {/* Product Links */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Product Modules
+              </div>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <Link to="/leads" className="hover:text-black transition-colors">
+                    Buyer & Leads CRM
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/deals" className="hover:text-black transition-colors">
+                    Visual Trade Pipeline
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/companies" className="hover:text-black transition-colors">
+                    Company Directory
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/proposals" className="hover:text-black transition-colors">
+                    Proposals Builder
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/meetings" className="hover:text-black transition-colors">
+                    Meetings Scheduler
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Solutions Links */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Solutions
+              </div>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <Link to="/services" className="hover:text-black transition-colors">
+                    DGFT Authorizations
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/services" className="hover:text-black transition-colors">
+                    Customs Compliance
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/services" className="hover:text-black transition-colors">
+                    SEZ / EOU Setups
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/services" className="hover:text-black transition-colors">
+                    Export Incentive Schemes
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/services" className="hover:text-black transition-colors">
+                    Trade Finance & GST
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Resources & Legal */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Company & Support
+              </div>
+              <ul className="space-y-2 text-xs">
+                <li>
+                  <button
+                    onClick={() => setIsDemoModalOpen(true)}
+                    className="hover:text-black transition-colors text-left"
                   >
-                    <m.icon size={18} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">{m.title}</div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">{m.badge}</div>
-                  </div>
-                </button>
-              ))}
+                    Request Demo
+                  </button>
+                </li>
+                <li>
+                  <a href="#hero" className="hover:text-black transition-colors">
+                    About EXIM NEXUS
+                  </a>
+                </li>
+                <li>
+                  <a href="#features" className="hover:text-black transition-colors">
+                    Security & Privacy
+                  </a>
+                </li>
+                <li>
+                  <a href="#stats" className="hover:text-black transition-colors">
+                    Terms of Service
+                  </a>
+                </li>
+              </ul>
             </div>
+          </div>
 
-            {/* Selected Module Detail Inspector */}
-            {(() => {
-              const current = featureModules.find((m) => m.id === activeFeature);
-              if (!current) return null;
-              return (
-                <div className="rounded-3xl border border-amber-200/70 bg-white p-6 sm:p-8 shadow-xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                  <div className="lg:col-span-7 space-y-6">
-                    <div className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 border border-indigo-200">
-                      <current.icon size={14} />
-                      <span>{current.badge}</span>
-                    </div>
+          {/* Bottom Copyright Strip */}
+          <div className="border-t border-[#EDE4D8] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div>
+              © {new Date().getFullYear()} EXIM NEXUS Platform. All rights reserved.
+            </div>
+            <div className="flex items-center gap-6">
+              <a href="#hero" className="hover:text-slate-800 transition">
+                Privacy Policy
+              </a>
+              <a href="#hero" className="hover:text-slate-800 transition">
+                Security Architecture
+              </a>
+              <a href="#hero" className="hover:text-slate-800 transition">
+                Contact Support
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
 
-                    <h3 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-                      {current.title}
-                    </h3>
+      {/* ======================= BOOK DEMO / TALK TO SALES MODAL ======================= */}
+      {isDemoModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl border border-[#EDE4D8] bg-white p-6 sm:p-8 shadow-2xl">
+            <button
+              onClick={() => setIsDemoModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 transition"
+            >
+              <X size={18} />
+            </button>
 
-                    <p className="text-slate-600 text-sm sm:text-base leading-relaxed font-normal">
-                      {current.description}
-                    </p>
+            {demoFormSubmitted ? (
+              <div className="py-8 text-center space-y-3">
+                <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center mx-auto">
+                  <Check size={24} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Demo Request Received!
+                </h3>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Our EXIM advisory consultant will reach out within 2 hours to confirm your custom walkthrough session.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleDemoSubmit} className="space-y-4">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold text-orange-700 mb-2">
+                    <Sparkles size={12} /> Personalized Walkthrough
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-950">
+                    Book a Platform Demo
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Discover how EXIM NEXUS streamlines your export-import advisory pipeline.
+                  </p>
+                </div>
 
-                    <div className="space-y-3 pt-2">
-                      <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Key Capabilities Included
-                      </div>
-                      {current.highlights.map((h) => (
-                        <div key={h} className="flex items-center gap-3 text-sm text-slate-800 font-medium">
-                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                          <span>{h}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="pt-4 flex items-center gap-3">
-                      <SignedIn>
-                        <Link
-                          to="/"
-                          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition"
-                        >
-                          <span>Open Module in CRM</span>
-                          <ArrowRight size={14} />
-                        </Link>
-                      </SignedIn>
-                      <SignedOut>
-                        <SignUpButton mode="modal">
-                          <button className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition">
-                            <span>Get Started</span>
-                            <ArrowRight size={14} />
-                          </button>
-                        </SignUpButton>
-                      </SignedOut>
-                    </div>
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Rajesh Sharma"
+                      value={demoData.name}
+                      onChange={(e) =>
+                        setDemoData({ ...demoData, name: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:border-orange-500 focus:outline-none"
+                    />
                   </div>
 
-                  {/* Module Feature Preview Card */}
-                  <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-slate-50/80 p-6 space-y-6">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                      <span className="text-xs font-bold text-slate-700">
-                        Module Metrics
-                      </span>
-                      <span className="text-[11px] text-emerald-700 font-bold">
-                        ● Live State
-                      </span>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Work Email
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="rajesh@enterpriseglobal.in"
+                      value={demoData.email}
+                      onChange={(e) =>
+                        setDemoData({ ...demoData, email: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      {current.previewStats.map((st) => (
-                        <div
-                          key={st.label}
-                          className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                        >
-                          <div className="text-[11px] text-slate-500 font-medium">{st.label}</div>
-                          <div className="text-xl font-extrabold text-slate-900 mt-1">
-                            {st.val}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Company / Organization Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Global Exim Logistics"
+                      value={demoData.company}
+                      onChange={(e) =>
+                        setDemoData({ ...demoData, company: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:border-orange-500 focus:outline-none"
+                    />
+                  </div>
 
-                    <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-4 text-xs text-indigo-900 space-y-1">
-                      <div className="font-bold flex items-center gap-1.5 text-indigo-950">
-                        <Zap size={14} className="text-indigo-600" />
-                        Integrated with Frontend State
-                      </div>
-                      <p className="text-[11px] text-indigo-800 font-medium">
-                        All actions in this module are pre-wired and ready to sync with MongoDB backend endpoints.
-                      </p>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Primary Advisory Focus
+                    </label>
+                    <select
+                      value={demoData.service}
+                      onChange={(e) =>
+                        setDemoData({ ...demoData, service: e.target.value })
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:border-orange-500 focus:outline-none"
+                    >
+                      <option>DGFT Advisory & Licensing</option>
+                      <option>Customs Clearance & Audit</option>
+                      <option>SEZ / EOU Unit Onboarding</option>
+                      <option>Export Lead & Proposal Management</option>
+                    </select>
                   </div>
                 </div>
-              );
-            })()}
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="w-full rounded-full bg-[#111827] py-3 text-xs font-bold text-white shadow-md transition hover:bg-black"
+                  >
+                    Confirm Demo Booking
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
-        )}
-      </main>
+        </div>
+      )}
     </div>
   );
 }
