@@ -43,10 +43,9 @@ export function TopBar() {
             onClick={() => setOpenSearch(true)}
             className="group flex w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2 text-left text-sm text-muted-foreground shadow-sm transition hover:border-primary/30 hover:shadow-md cursor-pointer"
           >
-            <Search className="h-4 w-4" size={16} />
             <span>Search leads, companies, deals, meetings…</span>
             <kbd className="ml-auto rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-              ⌘K
+              X
             </kbd>
           </button>
           {openSearch && <SearchPalette onClose={() => setOpenSearch(false)} />}
@@ -206,7 +205,6 @@ function SearchPalette({ onClose }) {
       >
         {/* Search Header */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3 bg-muted/30">
-          <Search size={18} className="text-indigo-500 shrink-0" />
           <input
             autoFocus
             value={query}
