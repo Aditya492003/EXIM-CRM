@@ -217,11 +217,14 @@ export function LandingPage() {
       </header>
 
       {/* ======================= HERO SECTION (IMAGE 1) ======================= */}
-      <section id="hero" className="relative pt-8 pb-16 sm:pt-14 sm:pb-24">
+      <section id="hero" className="relative pt-8 pb-16 sm:pt-14 sm:pb-24 overflow-hidden">
+        {/* Warm Organic Circle Glow behind Right Side (Matching Image 1) */}
+        <div className="absolute top-1/2 -translate-y-1/2 right-[-10%] w-[680px] h-[680px] lg:w-[850px] lg:h-[850px] rounded-full bg-[#FCE8D3]/75 -z-10 pointer-events-none blur-[1px]" />
+
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-6 items-center">
             {/* Left Column: Headlines & CTAs */}
-            <div className="lg:col-span-5 space-y-7 text-left">
+            <div className="lg:col-span-5 space-y-7 text-left z-10">
               {/* Badge: New Feature Announcement */}
               <div className="inline-flex items-center gap-2.5 rounded-full bg-[#F5ECE0] border border-[#E9DAC8] px-3.5 py-1 text-xs font-semibold text-slate-800 shadow-sm">
                 <span className="flex items-center gap-1 rounded-full bg-[#E5D4BE] px-2 py-0.5 text-[11px] font-bold text-slate-900">
@@ -234,7 +237,7 @@ export function LandingPage() {
               </div>
 
               {/* Huge Main Headline */}
-              <h1 className="text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight text-slate-950 leading-[1.12]">
+              <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-extrabold tracking-tight text-slate-950 leading-[1.1]">
                 Where teams create and{" "}
                 <span className="text-[#FF7A00]">achieve</span> more.
               </h1>
@@ -313,36 +316,15 @@ export function LandingPage() {
               </div>
             </div>
 
-            {/* Right Column: CRM Dashboard Mockup (Matching Image 1) */}
-            <div className="lg:col-span-7 relative">
-              {/* Background decorative curved container glow */}
-              <div className="absolute -inset-2 rounded-[2.5rem] bg-gradient-to-tr from-amber-200/40 via-orange-100/30 to-amber-100/20 blur-xl -z-10" />
-
-              <div className="relative rounded-2xl sm:rounded-3xl border border-[#E8DFC8] bg-white shadow-2xl shadow-stone-300/40 overflow-hidden">
-                {/* Browser top-bar frame */}
-                <div className="flex items-center justify-between border-b border-slate-100 bg-[#FAFAFA] px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
-                    <span className="h-3 w-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
-                    <span className="h-3 w-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
-                    <span className="ml-3 text-[11px] font-mono text-slate-400">
-                      app.exim-nexus.internal / workspace
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Live Sync Active
-                    </span>
-                  </div>
-                </div>
-
-                {/* Embedded Uploaded CRM Dashboard Screenshot */}
-                <div className="relative bg-white w-full">
+            {/* Right Column: Large CRM Dashboard Mockup stuck to right screen side */}
+            <div className="lg:col-span-7 relative lg:-mr-12 xl:-mr-28 2xl:-mr-44 lg:translate-x-4">
+              <div className="relative rounded-2xl sm:rounded-3xl lg:rounded-r-none bg-white shadow-2xl shadow-stone-900/15 overflow-hidden">
+                {/* Embedded Uploaded CRM Dashboard Screenshot (cropped & scaled cleanly) */}
+                <div className="relative bg-white w-full overflow-hidden">
                   <img
                     src={crmHeroUi}
                     alt="EXIM CRM Dashboard Interface"
-                    className="w-full h-auto object-cover object-left-top block select-none"
+                    className="w-full h-[360px] sm:h-[480px] md:h-[540px] lg:h-[600px] xl:h-[660px] object-cover object-left-top block select-none scale-[1.02] origin-top-left"
                   />
                 </div>
               </div>
