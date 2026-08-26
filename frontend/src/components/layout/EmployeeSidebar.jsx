@@ -13,6 +13,7 @@ import {
   Plus,
   LayoutTemplate,
   Boxes,
+  User,
 } from "lucide-react";
 
 const navSections = [
@@ -20,6 +21,7 @@ const navSections = [
     title: "Workspace",
     items: [
       { to: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/employee/about", label: "My Profile", icon: User },
       { to: "/employee/companies", label: "Companies", icon: Building2 },
       { to: "/contacts", label: "Contacts", icon: UserCheck },
       { to: "/employee/leads", label: "My Leads", icon: Users },

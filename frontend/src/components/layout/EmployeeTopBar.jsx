@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { UserButton, useUser, useAuth } from "@clerk/clerk-react";
-import { Calendar, Search, Bell, ChevronDown, Sun, Moon } from "lucide-react";
+import { Calendar, Search, Bell, ChevronDown, Sun, Moon, User } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -102,8 +102,15 @@ export function EmployeeTopBar() {
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </Button>
 
-        {/* User Button */}
+        {/* My Profile Link & User Button */}
         <div className="flex items-center gap-3 border-l border-border/50 pl-4">
+          <a
+            href="/employee/about"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-border/60 bg-card px-3 py-1.5 text-xs font-semibold shadow-xs hover:bg-muted transition"
+          >
+            <User size={13} className="text-primary" />
+            <span>Profile</span>
+          </a>
           <UserButton showName />
         </div>
       </div>

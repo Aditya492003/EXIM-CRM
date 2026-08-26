@@ -4,6 +4,7 @@ import {
   getEmployees,
   getEmployee,
   getEmployeeProfile,
+  updateEmployeeProfile,
   inviteEmployee,
   updateEmployee,
   deleteEmployee,
@@ -16,7 +17,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.route("/").get(getEmployees);
-router.route("/me").get(getEmployeeProfile);
+router.route("/me").get(getEmployeeProfile).put(updateEmployeeProfile);
 router.route("/invite").post(inviteEmployee);
 router.route("/sync").post(syncEmployee);
 router.route("/status").patch(updateWorkingStatus);

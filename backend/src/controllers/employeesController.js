@@ -242,19 +242,149 @@ export const syncEmployee = async (req, res, next) => {
   }
 };
 
-// @desc  Get current employee profile
+// @desc  Get current employee profile with manager & team members
 // @route GET /api/employees/me
 export const getEmployeeProfile = async (req, res, next) => {
   try {
     const userId = req.user?.clerkId;
     let employee = await Employee.findOne({ clerkUserId: userId });
-    if (!employee && req.user?.name) {
-      employee = await Employee.findOne({ name: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
+    if (!employee && req.user?.email) {
+      employee = await Employee.findOne({ email: req.user.email.toLowerCase().trim() });
     }
+    if (!employee && req.user?.name) {
+      employee = await Employee.findOne({
+        name: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i"),
+      });
+    }
+
+    // Auto create basic profile if not exists
+    if (!employee && userId) {
+      employee = await Employee.create({
+        name: req.user?.name || "Employee User",
+        email: req.user?.email || `${userId}@crm.internal`,
+        role: "Employee",
+        department: "Sales & Advisory",
+        status: "Active",
+        workingStatus: "Available",
+        clerkUserId: userId,
+        joinedDate: Date.now(),
+        position: "iOS Developer",
+      });
+    }
+
     if (!employee) {
       return res.status(404).json({ success: false, message: "Employee profile not found" });
     }
-    res.status(200).json({ success: true, data: employee });
+
+    let managerInfo = null;
+    let teamMembers = [];
+
+    const managerId = employee.managerClerkId || employee.invitedBy;
+    if (managerId) {
+      try {
+        const mgrUser = await clerkClient.users.getUser(managerId);
+        managerInfo = {
+          id: managerId,
+          name: mgrUser?.fullName || `${mgrUser?.firstName || ""} ${mgrUser?.lastName || ""}`.trim() || employee.managerName || "Kirk Mitrohin",
+          email: mgrUser?.emailAddresses?.[0]?.emailAddress || employee.managerEmail || "manager@eximnexus.com",
+          avatar: mgrUser?.imageUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80",
+          role: "Manager",
+        };
+      } catch (mErr) {
+        managerInfo = {
+          id: managerId,
+          name: employee.managerName || "Kirk Mitrohin",
+          email: employee.managerEmail || "manager@eximnexus.com",
+          avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80",
+          role: "Manager",
+        };
+      }
+
+      // Fetch other team members under the same manager
+      teamMembers = await Employee.find({
+        $or: [{ managerClerkId: managerId }, { invitedBy: managerId }],
+        _id: { $ne: employee._id },
+      }).select("name email phone role position department status workingStatus clerkUserId").lean();
+    } else {
+      managerInfo = {
+        name: employee.managerName || "Kirk Mitrohin",
+        email: employee.managerEmail || "manager@eximnexus.com",
+        avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80",
+        role: "Manager",
+      };
+    }
+
+    const hrInfo = {
+      name: employee.hrName || "Kate Middleton",
+      role: "HR",
+      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
+    };
+
+    const leadInfo = {
+      name: employee.leadName || "Eugene Hummell",
+      role: "Lead",
+      avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80",
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...employee.toObject(),
+        manager: managerInfo,
+        hr: hrInfo,
+        lead: leadInfo,
+        teamMembers: teamMembers,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Update current employee profile
+// @route PUT /api/employees/me
+export const updateEmployeeProfile = async (req, res, next) => {
+  try {
+    const userId = req.user?.clerkId;
+    const {
+      name,
+      phone,
+      role,
+      position,
+      department,
+      onboardingRequired,
+      onboardingStatus,
+      onboardingProgress,
+      onboardingScripts,
+    } = req.body;
+
+    let employee = await Employee.findOne({ clerkUserId: userId });
+    if (!employee && req.user?.email) {
+      employee = await Employee.findOne({ email: req.user.email.toLowerCase().trim() });
+    }
+    if (!employee && req.user?.name) {
+      employee = await Employee.findOne({
+        name: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i"),
+      });
+    }
+
+    if (!employee) {
+      return res.status(404).json({ success: false, message: "Employee record not found" });
+    }
+
+    if (name) employee.name = name.trim();
+    if (phone !== undefined) employee.phone = phone.trim();
+    if (role) employee.role = role;
+    if (position !== undefined) employee.position = position;
+    if (department) employee.department = department;
+    if (onboardingRequired !== undefined) employee.onboardingRequired = onboardingRequired;
+    if (onboardingStatus) employee.onboardingStatus = onboardingStatus;
+    if (onboardingProgress !== undefined) employee.onboardingProgress = onboardingProgress;
+    if (onboardingScripts) employee.onboardingScripts = onboardingScripts;
+
+    await employee.save();
+
+    res.status(200).json({ success: true, data: employee, message: "Profile updated successfully" });
   } catch (error) {
     next(error);
   }
