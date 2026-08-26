@@ -42,24 +42,23 @@ export const Route = createFileRoute("/proposals/new")({
 
 /* ───────────────────────── Workflow Steps ───────────────────────── */
 const STEPS = [
-  { id: "client",   label: "1. Select Client",   icon: Building2 },
-  { id: "service",  label: "2. Select Service",  icon: FileText },
+  { id: "client", label: "1. Select Client", icon: Building2 },
+  { id: "service", label: "2. Select Service", icon: FileText },
   { id: "template", label: "3. Choose Template", icon: LayoutTemplate },
-  { id: "editor",   label: "4. Live Editor",     icon: Edit3 },
-  { id: "save",     label: "5. Save & Send",     icon: Save },
-  { id: "export",   label: "6. Export",          icon: Download },
+  { id: "editor", label: "4. Live Editor", icon: Edit3 },
+  { id: "save", label: "5. Save & Send", icon: Save },
+  { id: "export", label: "6. Export", icon: Download },
 ];
 
 /* ───────────────────────── Standard Placeholders ───────────────────────── */
 const DEFAULT_PLACEHOLDERS = [
-  { key: "date",           label: "Proposal Date",    category: "General" },
-  { key: "client_name",    label: "Client Company",   category: "Client" },
-  { key: "contact_person", label: "Contact Person",  category: "Client" },
-  { key: "client_email",   label: "Client Email",     category: "Client" },
-  { key: "address",        label: "Client Address",   category: "Client" },
-  { key: "service_fee",    label: "Service Fee (₹)",  category: "Commercial" },
-  { key: "proposal_no",    label: "Proposal Number",  category: "General" },
-  { key: "validity",       label: "Validity Period", category: "Commercial" },
+  { key: "date", label: "Proposal Date", category: "General" },
+  { key: "client_name", label: "Client Company", category: "Client" },
+  { key: "client_email", label: "Client Email", category: "Client" },
+  { key: "address", label: "Client Address", category: "Client" },
+  { key: "service_fee", label: "Service Fee (₹)", category: "Commercial" },
+  { key: "proposal_no", label: "Proposal Number", category: "General" },
+  { key: "validity", label: "Validity Period", category: "Commercial" },
 ];
 
 function NewProposalPage() {
@@ -80,7 +79,7 @@ function NewProposalPage() {
   const [emailSuccessModalData, setEmailSuccessModalData] = useState(null);
 
   useEffect(() => {
-    api.get("/employees").then(res => setEmployees(res.data?.data || [])).catch(() => {});
+    api.get("/employees").then(res => setEmployees(res.data?.data || [])).catch(() => { });
     api.get("/companies")
       .then(res => setDbCompanies(res.data?.data || []))
       .catch((err) => console.error("Failed to load companies for proposal", err))
@@ -210,7 +209,7 @@ function NewProposalPage() {
 
       if (res.data?.success) {
         toast.success(res.data?.message || `Proposal email & edited document delivered directly to ${targetEmail}!`);
-        
+
         // Open Email Success Pop-up Modal!
         setEmailSuccessModalData({
           to: targetEmail || "Client Email",
@@ -1158,7 +1157,7 @@ function EmailSuccessModal({ data, onClose, onExport }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-3xl border border-indigo-200/80 bg-card p-6 shadow-2xl space-y-5 dark:border-indigo-900/60">
-        
+
         {/* Animated Header */}
         <div className="text-center space-y-2">
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/30">

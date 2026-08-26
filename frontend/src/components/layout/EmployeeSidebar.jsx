@@ -21,7 +21,6 @@ const navSections = [
     title: "Workspace",
     items: [
       { to: "/employee/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { to: "/employee/about", label: "My Profile", icon: User },
       { to: "/employee/companies", label: "Companies", icon: Building2 },
       { to: "/contacts", label: "Contacts", icon: UserCheck },
       { to: "/employee/leads", label: "My Leads", icon: Users },
@@ -37,6 +36,12 @@ const navSections = [
       { to: "/proposals/new", label: "Create Proposal", icon: Plus },
       { to: "/proposals/templates", label: "Templates", icon: LayoutTemplate },
       { to: "/services", label: "Services", icon: Boxes },
+    ],
+  },
+  {
+    title: "profile",
+    items: [
+      { to: "/employee/about", label: "My Profile", icon: User },
     ],
   },
 ];
