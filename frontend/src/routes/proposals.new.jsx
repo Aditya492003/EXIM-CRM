@@ -291,16 +291,85 @@ function NewProposalPage() {
   const [zoom, setZoom] = useState(90);
   const [detectedTags, setDetectedTags] = useState([]);
 
+  /* Helper to auto-resolve values for DOCX tags */
+  const autoResolveTagValue = (tag, currentClientObj, currentServiceObj, prevFormData) => {
+    const t = tag.toLowerCase().trim();
+
+    // 1. Company / Client Name variations
+    if (["company_name", "companyname", "company", "client_name", "clientname", "client", "client_company", "company_title"].includes(t)) {
+      if (currentClientObj?.name) return currentClientObj.name;
+    }
+
+    // 2. Company / Client Email variations
+    if (["client_email", "company_email", "email", "clientemail", "companyemail"].includes(t)) {
+      if (currentClientObj?.email) return currentClientObj.email;
+    }
+
+    // 3. Company / Client Address variations
+    if (["address", "client_address", "company_address", "clientaddress", "companyaddress"].includes(t)) {
+      if (currentClientObj?.address) return currentClientObj.address;
+      if (currentClientObj?.industry) return `${currentClientObj.industry} Sector`;
+    }
+
+    // 4. Contact Person variations
+    if (["contact_person", "contactperson", "contact_name", "contact", "client_contact", "attn"].includes(t)) {
+      if (currentClientObj?.primaryContact) return currentClientObj.primaryContact;
+    }
+
+    // 5. Date variations
+    if (["date", "proposal_date", "today_date", "current_date", "created_date"].includes(t)) {
+      return new Date().toLocaleDateString("en-GB");
+    }
+
+    // 6. Service Name variations
+    if (["service", "service_name", "servicename", "advisory_service", "job", "job_name"].includes(t)) {
+      if (currentServiceObj?.name) return currentServiceObj.name;
+    }
+
+    // 7. Service Fee variations
+    if (["service_fee", "servicefee", "fee", "amount", "total_fee", "price"].includes(t)) {
+      if (currentServiceObj) {
+        const rawPrice = currentServiceObj.price ?? currentServiceObj.fee ?? "";
+        const numStr = String(rawPrice).replace(/[^\d]/g, "");
+        if (numStr) return Number(numStr).toLocaleString("en-IN");
+      }
+    }
+
+    return prevFormData?.[tag] ?? "";
+  };
+
   /* Auto-fill placeholders when Client changes */
   useEffect(() => {
     if (clientObj) {
-      setFormData((prev) => ({
-        ...prev,
-        client_name: clientObj.name,
-        contact_person: clientObj.primaryContact || "Primary Contact",
-        client_email: clientObj.email || prev.client_email || "",
-        address: clientObj.address || `${clientObj.industry || "General"} Sector`,
-      }));
+      setFormData((prev) => {
+        const updated = { ...prev };
+        const companyVal = clientObj.name || "";
+        const emailVal = clientObj.email || prev.client_email || "";
+        const addressVal = clientObj.address || `${clientObj.industry || "General"} Sector`;
+        const contactVal = clientObj.primaryContact || "Primary Contact";
+
+        // Assign to all variations of company / client name
+        ["client_name", "company_name", "companyname", "company", "client", "client_company", "company_title"].forEach((key) => {
+          updated[key] = companyVal;
+        });
+
+        // Assign to all variations of email
+        ["client_email", "company_email", "email", "clientemail", "companyemail"].forEach((key) => {
+          updated[key] = emailVal;
+        });
+
+        // Assign to all variations of address
+        ["address", "client_address", "company_address", "clientaddress", "companyaddress"].forEach((key) => {
+          updated[key] = addressVal;
+        });
+
+        // Assign to all variations of contact person
+        ["contact_person", "contactperson", "contact_name", "contact", "client_contact"].forEach((key) => {
+          updated[key] = contactVal;
+        });
+
+        return updated;
+      });
     }
   }, [clientObj]);
 
@@ -310,10 +379,20 @@ function NewProposalPage() {
       const rawPrice = serviceObj.price ?? serviceObj.fee ?? "";
       const numStr = String(rawPrice).replace(/[^\d]/g, "");
       const formattedFee = numStr ? Number(numStr).toLocaleString("en-IN") : String(rawPrice);
-      setFormData((prev) => ({
-        ...prev,
-        service_fee: formattedFee,
-      }));
+      const serviceNameVal = serviceObj.name || "";
+
+      setFormData((prev) => {
+        const updated = { ...prev };
+        if (formattedFee) {
+          ["service_fee", "servicefee", "fee", "amount", "total_fee", "price"].forEach((key) => {
+            updated[key] = formattedFee;
+          });
+        }
+        ["service", "service_name", "servicename", "advisory_service", "job", "job_name"].forEach((key) => {
+          updated[key] = serviceNameVal;
+        });
+        return updated;
+      });
     }
   }, [serviceObj]);
 
@@ -329,12 +408,13 @@ function NewProposalPage() {
       const tags = Array.from(new Set(matches.map(m => m.replace(/[{}]/g, "").trim())));
       setDetectedTags(tags);
 
-      // Auto-initialize form fields for any newly detected tags
+      // Auto-initialize and auto-resolve values for all detected tags
       setFormData((prev) => {
         const updated = { ...prev };
         tags.forEach((tag) => {
-          if (!(tag in updated)) {
-            updated[tag] = "";
+          const autoVal = autoResolveTagValue(tag, clientObj, serviceObj, prev);
+          if (autoVal || !(tag in updated) || updated[tag] === "") {
+            updated[tag] = autoVal;
           }
         });
         return updated;
@@ -342,7 +422,7 @@ function NewProposalPage() {
     } catch (err) {
       console.error("Failed to extract DOCX tags", err);
     }
-  }, [templateBuffer]);
+  }, [templateBuffer, clientObj, serviceObj]);
 
   /* Load raw DOCX template buffer when template changes */
   useEffect(() => {
