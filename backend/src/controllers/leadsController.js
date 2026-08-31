@@ -3,6 +3,7 @@ import Deal from "../models/Deal.js";
 import Company from "../models/Company.js";
 import Contact from "../models/Contact.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
+import { areCompanyNamesMatching } from "../utils/companyUtils.js";
 
 // Helper: build workspace-isolated filter (includes active collaboration leads)
 const userFilter = (req, extra = {}) => {
@@ -160,20 +161,45 @@ export const createLead = async (req, res, next) => {
 
     if (company && company.trim()) {
       const companyClean = company.trim();
-      const compRegex = new RegExp(`^${companyClean.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+      const allCompanies = await Company.find({}).lean();
 
-      // Search for existing Company in workspace
-      companyRecord = await Company.findOne({
-        name: compRegex,
-        $or: [
-          { workspaceManagerId: workspaceManagerId },
-          { createdByClerkId: workspaceManagerId },
-          { sharedWithManagerIds: workspaceManagerId }
-        ]
+      // Search for existing Company in current workspace using intelligent fuzzy matching
+      companyRecord = allCompanies.find((c) => {
+        const isWorkspace = c.workspaceManagerId === workspaceManagerId ||
+                            c.createdByClerkId === workspaceManagerId ||
+                            c.sharedWithManagerIds?.includes(workspaceManagerId);
+        return isWorkspace && areCompanyNamesMatching(c.name, companyClean);
       });
 
-      // CASE 2: Company Doesn't Exist in Database
+      // CASE 2: Company Doesn't Exist in User's Workspace
       if (!companyRecord) {
+        // Check if Company exists globally under ANY other workspace in MongoDB using fuzzy matching
+        const globalCompany = allCompanies.find((c) => areCompanyNamesMatching(c.name, companyClean));
+
+        if (globalCompany) {
+          let ownerManagerName = globalCompany.ownerManagerName || globalCompany.assignedManager || "Workspace Manager";
+          if (globalCompany.workspaceManagerId) {
+            try {
+              const clerkUser = await clerkClient.users.getUser(globalCompany.workspaceManagerId);
+              const fName = clerkUser?.firstName || "";
+              const lName = clerkUser?.lastName || "";
+              ownerManagerName = `${fName} ${lName}`.trim() || clerkUser?.username || ownerManagerName;
+            } catch (cErr) {}
+          }
+
+          return res.status(409).json({
+            success: false,
+            isCompanyCrossWorkspaceDuplicate: true,
+            message: `Company "${companyClean}" matches existing company "${globalCompany.name}" under Manager ${ownerManagerName}'s workspace.`,
+            existingCompany: {
+              _id: globalCompany._id,
+              name: globalCompany.name,
+              ownerManagerName,
+              workspaceManagerId: globalCompany.workspaceManagerId,
+            }
+          });
+        }
+
         if (!createMissingCompany && !confirmCompany) {
           // Ask user via UI modal prompt: "Company Not Found. Create New Company?"
           return res.status(200).json({

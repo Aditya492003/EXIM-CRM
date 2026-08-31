@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
-  ArrowUpDown, Calendar, ChevronLeft, ChevronRight, Columns3, Download,
+  ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Columns3, Download,
   Filter, MessageSquare, MoreHorizontal, Phone, Plus, RefreshCw, Search,
   Sparkles, Star, Trash2, Upload, X, Mail, FileText, Handshake, CheckCircle2,
   Clock, User as UserIcon, PhoneCall, StickyNote, Pencil, Globe, Loader2, Building2,
@@ -651,9 +651,23 @@ function CompanySearchSelect({ value, onChange, onCompanySelect, required = fals
   }, [api]);
 
   const filtered = useMemo(() => {
-    if (!value) return companies;
-    const q = value.toLowerCase();
-    return companies.filter(c => c.name.toLowerCase().includes(q));
+    if (!value || !value.trim()) return companies;
+    const q = value.toLowerCase().trim();
+    const cleanQ = q.replace(/&/g, " and ").replace(/[.,\/#!$%\^&\*;:{}=\-_`~()'"\\]/g, " ");
+    const tokens = cleanQ.split(/\s+/).filter(Boolean);
+
+    return companies.filter((c) => {
+      const normName = c.name.toLowerCase().replace(/&/g, " and ").replace(/[.,\/#!$%\^&\*;:{}=\-_`~()'"\\]/g, " ");
+      if (normName.includes(cleanQ)) return true;
+
+      return tokens.every((token) => {
+        if (token === "pvt" || token === "private") return normName.includes("pvt") || normName.includes("private");
+        if (token === "ltd" || token === "limited") return normName.includes("ltd") || normName.includes("limited");
+        if (token === "corp" || token === "corporation") return normName.includes("corp") || normName.includes("corporation");
+        if (token === "inc" || token === "incorporated") return normName.includes("inc") || normName.includes("incorporated");
+        return normName.includes(token);
+      });
+    });
   }, [companies, value]);
 
   return (
@@ -872,14 +886,18 @@ function EmployeeSelect({ value, onChange }) {
   );
 }
 
-// Reusable Service Select Component (Fetches live from DB)
-function ServiceSelect({ value, onChange }) {
+// Reusable Searchable Service Select Component (Fetches live from DB, removes (₹0), searchable)
+function ServiceSelect({ value, onChange, required = true }) {
   const api = useApi();
   const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchServices = async () => {
       try {
+        setLoading(true);
         const res = await api.get("/services");
         const list = res.data?.data || [];
         setServices(list);
@@ -888,32 +906,85 @@ function ServiceSelect({ value, onChange }) {
         }
       } catch (err) {
         console.error("Failed to fetch services", err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchServices();
   }, [api]);
 
-  const hasValue = value && services.some((s) => s.name === value);
+  const filtered = useMemo(() => {
+    if (!search.trim()) return services;
+    const q = search.toLowerCase();
+    return services.filter(
+      (s) => s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q))
+    );
+  }, [services, search]);
+
+  const displayVal = value || "";
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 cursor-pointer"
-    >
-      {services.length === 0 ? (
-        <option value="">No services found</option>
-      ) : (
+    <div className="relative">
+      <div className="relative">
+        <input
+          required={required}
+          value={open ? search : displayVal}
+          onFocus={() => {
+            setSearch("");
+            setOpen(true);
+          }}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+          placeholder="Type to search service / job…"
+          className="w-full rounded-xl border border-border bg-background pl-3 pr-8 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+        />
+        <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+      </div>
+
+      {open && (
         <>
-          {value && !hasValue && <option value={value}>{value}</option>}
-          {services.map((s) => (
-            <option key={s._id || s.name} value={s.name}>
-              {s.name} ({s.fee ? `₹${s.fee.toLocaleString("en-IN")}` : s.price || "₹0"})
-            </option>
-          ))}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl animate-fade-in">
+            {loading ? (
+              <div className="p-3 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 size={13} className="animate-spin text-indigo-500" /> Loading services…
+              </div>
+            ) : filtered.length > 0 ? (
+              filtered.map((s) => {
+                const isSelected = value === s.name;
+                return (
+                  <button
+                    key={s._id || s.name}
+                    type="button"
+                    onClick={() => {
+                      onChange(s.name);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs text-left cursor-pointer transition",
+                      isSelected ? "bg-indigo-50 text-indigo-700 font-bold dark:bg-indigo-500/20 dark:text-indigo-300" : "hover:bg-muted text-foreground"
+                    )}
+                  >
+                    <div>
+                      <div className="font-semibold">{s.name}</div>
+                      {s.description && <div className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{s.description}</div>}
+                    </div>
+                    {isSelected && <CheckCircle2 size={13} className="text-indigo-600 shrink-0 ml-2" />}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="p-3 text-center text-xs text-muted-foreground">
+                No matching service found for "<span className="font-semibold text-foreground">{search}</span>".
+              </div>
+            )}
+          </div>
         </>
       )}
-    </select>
+    </div>
   );
 }
 
@@ -1192,14 +1263,17 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
   };
 
   const [duplicateData, setDuplicateData] = useState(null);
+  const [companyDuplicateData, setCompanyDuplicateData] = useState(null);
   const [companyPromptData, setCompanyPromptData] = useState(null);
   const [requestingCollab, setRequestingCollab] = useState(false);
+  const [requestingCompanyAccess, setRequestingCompanyAccess] = useState(false);
 
   const handleSubmit = async (e, options = {}) => {
     if (e?.preventDefault) e.preventDefault();
     try {
       setSubmitting(true);
       setDuplicateData(null);
+      setCompanyDuplicateData(null);
 
       const payload = {
         ...formData,
@@ -1218,7 +1292,9 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
       onClose();
     } catch (err) {
       console.error("Create lead error", err);
-      if (err.response?.data?.isLeadDuplicate && err.response?.data?.existingLead) {
+      if (err.response?.data?.isCompanyCrossWorkspaceDuplicate && err.response?.data?.existingCompany) {
+        setCompanyDuplicateData(err.response.data.existingCompany);
+      } else if (err.response?.data?.isLeadDuplicate && err.response?.data?.existingLead) {
         setDuplicateData(err.response.data.existingLead);
       } else {
         toast.error(err.response?.data?.message || "Failed to create lead");
@@ -1256,6 +1332,25 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
     }
   };
 
+  const handleRequestCompanyAccess = async () => {
+    if (!companyDuplicateData?._id) return;
+    try {
+      setRequestingCompanyAccess(true);
+      const res = await api.post("/company-requests", {
+        companyId: companyDuplicateData._id,
+        reason: `Requesting company access to create lead for ${companyDuplicateData.name}`,
+      });
+      toast.success(res.data?.message || `Access request for "${companyDuplicateData.name}" sent to Manager ${companyDuplicateData.ownerManagerName}!`);
+      setCompanyDuplicateData(null);
+      onClose();
+    } catch (err) {
+      console.error("Company request error:", err);
+      toast.error(err.response?.data?.message || "Failed to send company access request");
+    } finally {
+      setRequestingCompanyAccess(false);
+    }
+  };
+
   /* Reusable autofill badge */
   const AutofilledBadge = () => (
     <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
@@ -1274,7 +1369,48 @@ export function AddLeadModal({ defaultCompany = "", defaultCompanyId = "", onClo
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
 
-        {duplicateData ? (
+        {companyDuplicateData ? (
+          <div className="mt-4 rounded-2xl border border-rose-300 bg-rose-50/90 p-5 dark:border-rose-900/50 dark:bg-rose-950/40 space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white font-bold">
+                <Building2 size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-rose-950 dark:text-rose-200">
+                  Company Already Exists in Another Workspace!
+                </h3>
+                <p className="text-xs text-rose-800/90 dark:text-rose-300/90 mt-0.5">
+                  Company <strong>{companyDuplicateData.name}</strong> is registered in the system under Manager <strong>{companyDuplicateData.ownerManagerName}</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white/90 dark:bg-slate-900/90 p-3.5 text-xs space-y-2 border border-rose-200 shadow-sm text-foreground">
+              <div>To prevent duplicate company accounts in the CRM, creating a duplicate company is blocked.</div>
+              <div className="pt-2 text-indigo-700 font-bold border-t border-rose-200/60 dark:text-indigo-300">
+                Please request company access from Manager {companyDuplicateData.ownerManagerName}. Once approved, you can create leads for this company.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-rose-200">
+              <button
+                type="button"
+                onClick={() => setCompanyDuplicateData(null)}
+                className="rounded-xl border border-rose-300 bg-white px-3.5 py-2 text-xs font-semibold text-rose-900 hover:bg-rose-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRequestCompanyAccess}
+                disabled={requestingCompanyAccess}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-2 text-xs font-extrabold text-white shadow-md hover:shadow-lg transition cursor-pointer disabled:opacity-50"
+              >
+                {requestingCompanyAccess ? <Loader2 size={14} className="animate-spin" /> : <Building2 size={14} />} Request Company Access
+              </button>
+            </div>
+          </div>
+        ) : duplicateData ? (
           <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50/90 p-5 dark:border-amber-900/50 dark:bg-amber-950/40 space-y-4 animate-scale-in">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white font-bold">

@@ -1,5 +1,6 @@
 import Company from "../models/Company.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
+import { areCompanyNamesMatching } from "../utils/companyUtils.js";
 
 // Helper: build workspace-isolated filter (includes shared companies)
 const userFilter = (req, extra = {}) => {
@@ -69,20 +70,21 @@ export const createCompany = async (req, res, next) => {
 
     const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
 
-    // Build conditions for scanning Name, Phone, and Email/Gmail
-    const orConditions = [{ name: new RegExp(`^${trimmedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") }];
-    if (trimmedEmail) orConditions.push({ email: trimmedEmail });
-    if (trimmedPhone) orConditions.push({ phone: trimmedPhone });
-    if (trimmedGstin) orConditions.push({ gstin: trimmedGstin });
+    const allDbCompanies = await Company.find({}).lean();
 
-    // 1. Check if duplicate exists within CURRENT workspace
-    const localDuplicate = await Company.findOne({
-      $or: [
-        { workspaceManagerId: workspaceManagerId },
-        { createdByClerkId: workspaceManagerId },
-        { sharedWithManagerIds: workspaceManagerId }
-      ],
-      $and: [{ $or: orConditions }]
+    // 1. Check if duplicate exists within CURRENT workspace (using intelligent fuzzy matching)
+    const localDuplicate = allDbCompanies.find((c) => {
+      const isWorkspace = c.workspaceManagerId === workspaceManagerId ||
+                          c.createdByClerkId === workspaceManagerId ||
+                          c.sharedWithManagerIds?.includes(workspaceManagerId);
+      if (!isWorkspace) return false;
+
+      return (
+        areCompanyNamesMatching(c.name, trimmedName) ||
+        (trimmedEmail && c.email?.toLowerCase() === trimmedEmail) ||
+        (trimmedPhone && c.phone === trimmedPhone) ||
+        (trimmedGstin && c.gstin === trimmedGstin)
+      );
     });
 
     if (localDuplicate) {
@@ -97,8 +99,15 @@ export const createCompany = async (req, res, next) => {
       });
     }
 
-    // 2. GLOBAL Deduplication Check across ALL Workspaces
-    const globalDuplicate = await Company.findOne({ $or: orConditions });
+    // 2. GLOBAL Deduplication Check across ALL Workspaces (using intelligent fuzzy matching)
+    const globalDuplicate = allDbCompanies.find((c) => {
+      return (
+        areCompanyNamesMatching(c.name, trimmedName) ||
+        (trimmedEmail && c.email?.toLowerCase() === trimmedEmail) ||
+        (trimmedPhone && c.phone === trimmedPhone) ||
+        (trimmedGstin && c.gstin === trimmedGstin)
+      );
+    });
 
     if (globalDuplicate) {
       let matchedField = "Name";
