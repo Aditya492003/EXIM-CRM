@@ -59,10 +59,12 @@ function ProposalsPage() {
         client: p.client || "",
         service: p.service || "",
         owner: p.owner || "Team Member",
-        value: p.amount ? `₹${(p.amount / 100000).toFixed(1)}L` : "₹0",
-        amount: p.amount || 0,
+        value: p.value ? `₹${Number(p.value).toLocaleString("en-IN")}` : "—",
         status: p.status || "Draft",
-        validUntil: p.validTill ? new Date(p.validTill).toLocaleDateString("en-IN") : ""
+        sentDate: p.sentDate 
+          ? new Date(p.sentDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) 
+          : (p.createdDate ? new Date(p.createdDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"),
+        validUntil: p.validTill ? new Date(p.validTill).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"
       })));
     } catch (err) {
       console.error("Failed to load proposals", err);
@@ -198,6 +200,7 @@ function ProposalsPage() {
                   <th className="px-4 py-3">Client</th>
                   <th className="px-4 py-3">Value</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Sent Date</th>
                   <th className="px-4 py-3">Valid Until</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -205,7 +208,7 @@ function ProposalsPage() {
               <tbody className="divide-y divide-border">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
                       <div className="mt-2 text-xs">Loading proposals from MongoDB...</div>
                     </td>
@@ -228,6 +231,7 @@ function ProposalsPage() {
                         {statusFilters.filter(s => s !== "All").map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{p.sentDate}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{p.validUntil}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => handleDelete(p)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
@@ -238,7 +242,7 @@ function ProposalsPage() {
                 ))}
                 {!loading && rows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
                       No proposals match filter criteria.
                     </td>
                   </tr>

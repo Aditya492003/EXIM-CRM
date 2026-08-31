@@ -99,16 +99,17 @@ function EmployeeProposalsPage() {
                   <th className="px-5 py-3">Service</th>
                   <th className="px-5 py-3">Value</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Sent Date</th>
                   <th className="px-5 py-3">Valid Till</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {loading ? (
-                  <tr><td colSpan="7" className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
+                  <tr><td colSpan="8" className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
                 ) : proposals.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="p-12 text-center">
+                    <td colSpan="8" className="p-12 text-center">
                       <FileText className="mx-auto h-8 w-8 text-muted-foreground/40" />
                       <p className="mt-2 text-sm text-muted-foreground">No proposals yet.</p>
                       <Link
@@ -149,6 +150,9 @@ function EmployeeProposalsPage() {
                             ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
+                      </td>
+                      <td className="px-5 py-4 text-muted-foreground text-xs font-medium">
+                        {p.sentDate ? new Date(p.sentDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : (p.createdDate ? new Date(p.createdDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—")}
                       </td>
                       <td className="px-5 py-4 text-muted-foreground text-xs">
                         {p.validTill ? new Date(p.validTill).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}
