@@ -69,7 +69,6 @@ function NewProposalPage() {
   const [employees, setEmployees] = useState([]);
   const [assignedTo, setAssignedTo] = useState("");
   const [savingProposal, setSavingProposal] = useState(false);
-
   const [dbCompanies, setDbCompanies] = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [dbServices, setDbServices] = useState([]);
@@ -266,6 +265,7 @@ function NewProposalPage() {
     format: "DOCX",
   });
   const [clientSearchQuery, setClientSearchQuery] = useState("");
+  const [serviceSearchQuery, setServiceSearchQuery] = useState("");
 
   /* Form Data for Placeholders */
   const [formData, setFormData] = useState({
@@ -553,10 +553,25 @@ function NewProposalPage() {
   );
 
   /* Step 2: Select Service */
+  const filteredServices = dbServices.filter((s) =>
+    !serviceSearchQuery ||
+    s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) ||
+    (s.description && s.description.toLowerCase().includes(serviceSearchQuery.toLowerCase()))
+  );
+
   const ServiceStep = (
     <div className="space-y-4">
-      <StepHeader step={2} title="Select Advisory Service" sub="Select an active service from your workspace database to auto-load fees." />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <StepHeader step={2} title="Select Advisory Service" sub="Select an active service from your workspace database to auto-load scope." />
+      <div className="relative">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={serviceSearchQuery}
+          onChange={(e) => setServiceSearchQuery(e.target.value)}
+          placeholder="Search services by title or scope…"
+          className={inputCls + " pl-9"}
+        />
+      </div>
+      <div className="max-h-[420px] overflow-y-auto pr-1 grid gap-3 sm:grid-cols-2">
         {loadingServices ? (
           <div className="col-span-full p-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
             <RefreshCw size={14} className="animate-spin text-indigo-500" /> Loading stored services…
@@ -565,17 +580,20 @@ function NewProposalPage() {
           <div className="col-span-full p-8 text-center text-xs text-muted-foreground">
             No active services found in database. Please create a service first in the Services section.
           </div>
+        ) : filteredServices.length === 0 ? (
+          <div className="col-span-full p-8 text-center text-xs text-muted-foreground">
+            No services matching "{serviceSearchQuery}".
+          </div>
         ) : (
-          dbServices.map((s) => {
+          filteredServices.map((s) => {
             const servId = s._id || s.id;
             const isSelected = service === servId;
-            const priceText = s.fee ? `₹${s.fee.toLocaleString("en-IN")}` : s.price || "₹0";
             return (
               <button
                 key={servId}
                 onClick={() => {
                   setService(servId);
-                  setServiceObj({ ...s, price: priceText });
+                  setServiceObj(s);
                 }}
                 className={cn(
                   "rounded-xl border p-4 text-left transition cursor-pointer",
@@ -590,10 +608,6 @@ function NewProposalPage() {
                     <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{s.description || "Advisory service"}</div>
                   </div>
                   {isSelected && <Check size={15} className="mt-0.5 shrink-0 text-indigo-600" />}
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium">{s.category || "General"}</span>
-                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{priceText}</span>
                 </div>
               </button>
             );

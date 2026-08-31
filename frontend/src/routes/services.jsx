@@ -13,14 +13,11 @@ export const Route = createFileRoute("/services")({
   component: ServicesPage,
 });
 
-const categories = ["All", "DGFT Advisory", "Capital Goods", "Export Benefit", "Compliance", "Special Economic Zones", "Customs Clearance", "Customs Certification", "Audit & Legal"];
-
 function ServicesPage() {
   const api = useApi();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
   const [openAdd, setOpenAdd] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -29,21 +26,15 @@ function ServicesPage() {
       setLoading(true);
       const res = await api.get("/services");
       let data = res.data?.data || [];
-      setServices(data.map(s => {
-        const numVal = s.price ?? s.fee ?? 0;
-        return {
-          id: s.code || s._id,
-          _id: s._id,
-          name: s.name,
-          category: s.category,
-          price: `₹${numVal.toLocaleString("en-IN")}`,
-          fee: numVal,
-          description: s.description || "",
-          activeLeads: s.activeJobsCount || s.activeLeads || 0,
-          completedJobs: s.completedJobsCount || s.completedJobs || 0,
-          status: s.status || "Active"
-        };
-      }));
+      setServices(data.map(s => ({
+        id: s.code || s._id,
+        _id: s._id,
+        name: s.name,
+        description: s.description || "",
+        activeLeads: s.activeJobsCount || s.activeLeads || 0,
+        completedJobs: s.completedJobsCount || s.completedJobs || 0,
+        status: s.status || "Active"
+      })));
     } catch (err) {
       console.error("Failed to load services", err);
       setServices([]);
@@ -71,11 +62,9 @@ function ServicesPage() {
 
   const filtered = useMemo(() => {
     return services.filter((s) => {
-      const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.description.toLowerCase().includes(search.toLowerCase());
-      const matchCategory = category === "All" || s.category === category;
-      return matchSearch && matchCategory;
+      return !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.description.toLowerCase().includes(search.toLowerCase());
     });
-  }, [services, search, category]);
+  }, [services, search]);
 
   return (
     <AppLayout>
@@ -84,7 +73,7 @@ function ServicesPage() {
           <div>
             <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Portfolio</div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Services & Advisory Jobs</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Manage service catalog, standard pricing, and track active jobs across clients.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Manage service catalog and track active jobs across clients.</p>
           </div>
           <button
             onClick={() => setOpenAdd(true)}
@@ -94,11 +83,10 @@ function ServicesPage() {
           </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard icon={Layers} label="Total Services" value={services.length} sub="Active catalog" color="indigo" />
-          <StatCard icon={Briefcase} label="Active Categories" value={new Set(services.map(s => s.category)).size} sub="Service divisions" color="emerald" />
-          <StatCard icon={TrendingUp} label="Catalog Categories" value={categories.length - 1} sub="Available sectors" color="blue" />
-          <StatCard icon={CheckCircle2} label="Published Services" value={services.filter(s => s.status === "Active").length} sub="Ready for proposals" color="amber" />
+          <StatCard icon={CheckCircle2} label="Published Services" value={services.filter(s => s.status === "Active").length} sub="Ready for proposals" color="emerald" />
+          <StatCard icon={Briefcase} label="Active Jobs" value={services.reduce((acc, s) => acc + (s.activeLeads || 0), 0)} sub="Across all clients" color="blue" />
         </div>
 
         <div className="rounded-2xl border border-border bg-card shadow-sm">
@@ -113,20 +101,6 @@ function ServicesPage() {
                 className="h-9 w-full rounded-xl border border-border bg-background pl-9 pr-4 text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               />
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer",
-                    category === cat ? "bg-indigo-600 text-white shadow" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                  )}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -135,8 +109,6 @@ function ServicesPage() {
                 <tr>
                   <th className="px-4 py-3">Code</th>
                   <th className="px-4 py-3">Service Title</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Standard Fee</th>
                   <th className="px-4 py-3 text-center">Active Jobs</th>
                   <th className="px-4 py-3 text-center">Completed</th>
                   <th className="px-4 py-3">Status</th>
@@ -145,7 +117,7 @@ function ServicesPage() {
               </thead>
               <tbody className="divide-y divide-border font-medium">
                 {loading ? (
-                  <tr><td colSpan={8} className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
+                  <tr><td colSpan={6} className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
                 ) : filtered.map((s) => (
                   <tr key={s._id || s.id} className="hover:bg-muted/40 transition group">
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-[11px] text-muted-foreground">{s.id}</td>
@@ -153,12 +125,6 @@ function ServicesPage() {
                       <div className="font-bold text-foreground text-sm">{s.name}</div>
                       <div className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{s.description || "No scope specified"}</div>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground">
-                        {s.category}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-bold text-indigo-600 dark:text-indigo-400">{s.price}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-center font-bold text-amber-600">{s.activeLeads}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-center font-bold text-emerald-600">{s.completedJobs}</td>
                     <td className="whitespace-nowrap px-4 py-3">
@@ -215,12 +181,9 @@ function StatCard({ icon: Icon, label, value, sub, color }) {
 function ServiceModal({ service, onClose, onSuccess }) {
   const api = useApi();
   const [submitting, setSubmitting] = useState(false);
-  const initialFee = service?.fee !== undefined && service?.fee !== null ? String(service.fee) : (service?.price ? String(service.price).replace(/[^\d]/g, '') : "");
   
   const [formData, setFormData] = useState({
     name: service?.name || "",
-    category: service?.category || "DGFT Advisory",
-    fee: initialFee,
     description: service?.description || "",
     code: service?.code || service?.id || `SRV-${Math.floor(1000 + Math.random() * 9000)}`,
   });
@@ -229,12 +192,8 @@ function ServiceModal({ service, onClose, onSuccess }) {
     e.preventDefault();
     try {
       setSubmitting(true);
-      const numericPrice = parseFloat(formData.fee) || 0;
       const payload = {
         name: formData.name,
-        category: formData.category,
-        price: numericPrice,
-        fee: numericPrice,
         description: formData.description,
         code: formData.code,
       };
@@ -262,7 +221,7 @@ function ServiceModal({ service, onClose, onSuccess }) {
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div>
             <h2 className="text-lg font-bold">{service ? "Edit Service / Job" : "Add New Advisory Service"}</h2>
-            <p className="text-xs text-muted-foreground">Configure pricing, category and description.</p>
+            <p className="text-xs text-muted-foreground">Configure service title and description.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
@@ -277,31 +236,6 @@ function ServiceModal({ service, onClose, onSuccess }) {
               placeholder="e.g. DGFT Advance Authorization"
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
             />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-semibold">Category *</label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 cursor-pointer"
-              >
-                {categories.filter((c) => c !== "All").map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold">Standard Fee (₹) *</label>
-              <input
-                type="number"
-                required
-                min="0"
-                value={formData.fee}
-                onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
-                placeholder="e.g. 50000"
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              />
-            </div>
           </div>
 
           <div>

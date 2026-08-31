@@ -9,8 +9,8 @@ const serviceSchema = new mongoose.Schema({
 
     category: {
         type: String,
-        required: true,
         trim: true,
+        default: "",
     },
 
     description: {

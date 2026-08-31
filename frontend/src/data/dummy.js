@@ -23,14 +23,14 @@ function daysAhead(n) {
 }
 
 export const servicesList = [
-  { id: "S-101", name: "DGFT Advance Authorization", category: "DGFT Advisory", price: "₹45,000", activeLeads: 12, completedJobs: 84, status: "Active", description: "Duty-free import of inputs physically incorporated into export products." },
-  { id: "S-102", name: "EPCG License", category: "Capital Goods", price: "₹60,000", activeLeads: 8, completedJobs: 56, status: "Active", description: "Import of capital goods at zero customs duty for export production." },
-  { id: "S-103", name: "RoDTEP Claim & Refund", category: "Export Benefit", price: "₹25,000", activeLeads: 15, completedJobs: 110, status: "Active", description: "Remission of Duties and Taxes on Exported Products reimbursement." },
-  { id: "S-104", name: "IEC Registration & Update", category: "Compliance", price: "₹10,000", activeLeads: 6, completedJobs: 210, status: "Active", description: "Import Export Code registration, modification, and annual updates." },
-  { id: "S-105", name: "SEZ & FTWZ Advisory", category: "Special Economic Zones", price: "₹1,20,000", activeLeads: 5, completedJobs: 32, status: "Active", description: "Setup, compliance, and tax incentives for SEZ & Free Trade Warehousing Units." },
-  { id: "S-106", name: "Customs Duty Refund & Drawback", category: "Customs Clearance", price: "₹50,000", activeLeads: 9, completedJobs: 65, status: "Active", description: "Duty drawback claims, excess customs duty refund processing." },
-  { id: "S-107", name: "AEO Certification T1/T2/T3", category: "Customs Certification", price: "₹1,50,000", activeLeads: 4, completedJobs: 24, status: "Active", description: "Authorized Economic Operator certification for faster customs clearance." },
-  { id: "S-108", name: "Export Documentation Audit", category: "Audit & Legal", price: "₹35,000", activeLeads: 7, completedJobs: 48, status: "Active", description: "Comprehensive audit of shipping bills, eBRC, bank realizations and DGFT filings." },
+  { id: "S-101", name: "DGFT Advance Authorization", activeLeads: 12, completedJobs: 84, status: "Active", description: "Duty-free import of inputs physically incorporated into export products." },
+  { id: "S-102", name: "EPCG License", activeLeads: 8, completedJobs: 56, status: "Active", description: "Import of capital goods at zero customs duty for export production." },
+  { id: "S-103", name: "RoDTEP Claim & Refund", activeLeads: 15, completedJobs: 110, status: "Active", description: "Remission of Duties and Taxes on Exported Products reimbursement." },
+  { id: "S-104", name: "IEC Registration & Update", activeLeads: 6, completedJobs: 210, status: "Active", description: "Import Export Code registration, modification, and annual updates." },
+  { id: "S-105", name: "SEZ & FTWZ Advisory", activeLeads: 5, completedJobs: 32, status: "Active", description: "Setup, compliance, and tax incentives for SEZ & Free Trade Warehousing Units." },
+  { id: "S-106", name: "Customs Duty Refund & Drawback", activeLeads: 9, completedJobs: 65, status: "Active", description: "Duty drawback claims, excess customs duty refund processing." },
+  { id: "S-107", name: "AEO Certification T1/T2/T3", activeLeads: 4, completedJobs: 24, status: "Active", description: "Authorized Economic Operator certification for faster customs clearance." },
+  { id: "S-108", name: "Export Documentation Audit", activeLeads: 7, completedJobs: 48, status: "Active", description: "Comprehensive audit of shipping bills, eBRC, bank realizations and DGFT filings." },
 ];
 
 const serviceNames = servicesList.map((s) => s.name);
