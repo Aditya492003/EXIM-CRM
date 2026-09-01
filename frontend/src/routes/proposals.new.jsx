@@ -60,6 +60,36 @@ const DEFAULT_PLACEHOLDERS = [
   { key: "validity", label: "Validity Period", category: "Commercial" },
 ];
 
+/* Smart template score matching helper for selected service */
+const getTemplateScore = (serviceName, template) => {
+  if (!serviceName || !template) return 0;
+  const sName = serviceName.toLowerCase().trim();
+  const tName = (template.name || "").toLowerCase().trim();
+  const tDesc = (template.description || "").toLowerCase().trim();
+  const tCat = (template.category || "").toLowerCase().trim();
+
+  // 1. Direct sub-string match (highest priority)
+  if (tName.includes(sName) || sName.includes(tName)) return 100;
+
+  // 2. Tokenized word matching excluding common stopwords
+  const stopWords = new Set([
+    "service", "services", "advisory", "consulting", "letter", "proposal",
+    "template", "engagement", "for", "and", "the", "with", "management", "compliance"
+  ]);
+
+  const sWords = sName.split(/[^a-zA-Z0-9]+/).filter((w) => w.length > 1 && !stopWords.has(w));
+  if (sWords.length === 0) return 0;
+
+  let score = 0;
+  sWords.forEach((word) => {
+    if (tName.includes(word)) score += 40;
+    else if (tDesc.includes(word)) score += 20;
+    else if (tCat.includes(word)) score += 15;
+  });
+
+  return score;
+};
+
 function NewProposalPage() {
   const navigate = useNavigate();
   const api = useApi();
@@ -676,6 +706,32 @@ function NewProposalPage() {
                 onClick={() => {
                   setService(servId);
                   setServiceObj(s);
+
+                  // Smart Template Auto-Matching
+                  const templatesToSearch = [defaultBuiltInTemplate, ...dbTemplates];
+                  let bestMatch = null;
+                  let maxScore = 0;
+
+                  templatesToSearch.forEach((tpl) => {
+                    const score = getTemplateScore(s.name, tpl);
+                    if (score > maxScore) {
+                      maxScore = score;
+                      bestMatch = tpl;
+                    }
+                  });
+
+                  if (bestMatch && maxScore >= 20) {
+                    setSelectedTemplate({
+                      id: bestMatch._id || bestMatch.id,
+                      _id: bestMatch._id,
+                      name: bestMatch.name,
+                      fileUrl: bestMatch.fileUrl,
+                      category: bestMatch.category,
+                      format: bestMatch.format || "DOCX",
+                      isBuiltIn: bestMatch.isBuiltIn || false,
+                    });
+                    toast.success(`✨ Auto-matched template "${bestMatch.name}" for "${s.name}"`);
+                  }
                 }}
                 className={cn(
                   "rounded-xl border p-4 text-left transition cursor-pointer",
@@ -723,9 +779,28 @@ function NewProposalPage() {
     (t.category || "").toLowerCase().includes(templateSearch.toLowerCase())
   );
 
+  // Sort templates so best matches for selected service appear first
+  const sortedTemplates = [...filteredTemplates].sort((a, b) => {
+    if (!serviceObj?.name) return 0;
+    const scoreA = getTemplateScore(serviceObj.name, a);
+    const scoreB = getTemplateScore(serviceObj.name, b);
+    return scoreB - scoreA;
+  });
+
   const TemplateStep = (
     <div className="space-y-4">
       <StepHeader step={3} title="Choose DOCX Template" sub="Select from your uploaded templates or use the built-in standard template." />
+
+      {/* Smart suggestion notification banner */}
+      {serviceObj && (
+        <div className="flex items-center gap-2 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 px-3.5 py-2.5 text-xs">
+          <Sparkles size={15} className="text-violet-600 dark:text-violet-400 shrink-0" />
+          <div className="flex-1">
+            <span className="font-bold text-violet-800 dark:text-violet-200">Smart Service Auto-Matching: </span>
+            <span className="text-violet-700 dark:text-violet-300">Templates matching <strong>"{serviceObj.name}"</strong> are auto-selected & pinned to top.</span>
+          </div>
+        </div>
+      )}
 
       {/* Search bar */}
       <div className="relative">
@@ -750,16 +825,19 @@ function NewProposalPage() {
       {/* Templates grid */}
       {loadingTemplates ? (
         <div className="p-8 text-center text-muted-foreground text-sm">Loading templates…</div>
-      ) : filteredTemplates.length === 0 ? (
+      ) : sortedTemplates.length === 0 ? (
         <div className="p-8 text-center text-muted-foreground text-sm">
           No templates found.{" "}
           <a href="/proposals/templates" className="text-indigo-600 underline">Upload one →</a>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-[420px] overflow-y-auto pr-1">
-          {filteredTemplates.map((t) => {
+          {sortedTemplates.map((t) => {
             const tid = t._id || t.id;
             const isSelected = selectedTemplate?.id === tid || selectedTemplate?._id === t._id;
+            const matchScore = serviceObj?.name ? getTemplateScore(serviceObj.name, t) : 0;
+            const isAutoMatched = matchScore >= 20;
+
             return (
               <button
                 key={tid}
@@ -775,17 +853,26 @@ function NewProposalPage() {
                   })
                 }
                 className={cn(
-                  "rounded-2xl border-2 p-4 text-left transition cursor-pointer",
+                  "rounded-2xl border-2 p-4 text-left transition cursor-pointer relative",
                   isSelected
                     ? "border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-200/60 dark:bg-indigo-500/10 dark:ring-indigo-500/30"
-                    : "border-border bg-card hover:bg-muted/60"
+                    : isAutoMatched
+                      ? "border-violet-300 bg-violet-50/30 dark:border-violet-800/80 dark:bg-violet-950/20"
+                      : "border-border bg-card hover:bg-muted/60"
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
                     <FileText size={14} />
                   </div>
-                  {isSelected && <Check size={15} className="text-indigo-600 shrink-0 mt-0.5" />}
+                  <div className="flex items-center gap-1">
+                    {isAutoMatched && (
+                      <span className="rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-2 py-0.5 font-bold text-[10px] flex items-center gap-1 shadow-sm">
+                        <Sparkles size={10} /> Suggested
+                      </span>
+                    )}
+                    {isSelected && <Check size={15} className="text-indigo-600 shrink-0 mt-0.5" />}
+                  </div>
                 </div>
                 <div className="mt-2 text-sm font-bold leading-snug line-clamp-2">{t.name}</div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{t.description || "Proposal template"}</div>
