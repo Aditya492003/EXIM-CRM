@@ -209,6 +209,7 @@ function SendProposalEmailModal({ proposal, onClose, onSuccess }) {
         clientName: proposal.client,
         proposalNumber: proposal.number,
         title: proposal.title,
+        serviceName: proposal.service,
         serviceFee: String(proposal.value || 0),
       };
 
@@ -301,8 +302,8 @@ function SendProposalEmailModal({ proposal, onClose, onSuccess }) {
           </div>
 
           <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs space-y-1.5 text-muted-foreground">
-            <div><strong className="text-foreground">Proposal:</strong> {proposal.title}</div>
-            <div><strong className="text-foreground">Value:</strong> ₹{(proposal.value || 0).toLocaleString("en-IN")}</div>
+            <div><strong className="text-foreground">Proposal Ref:</strong> {proposal.number}</div>
+            <div><strong className="text-foreground">Engagement Title:</strong> {proposal.service || proposal.title}</div>
             <div><strong className="text-foreground">Status:</strong> Will be updated to "Sent"</div>
           </div>
 

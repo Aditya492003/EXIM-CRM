@@ -147,6 +147,7 @@ export const createProposal = async (req, res, next) => {
           clientName: proposal.client,
           proposalNumber: proposal.number,
           title: proposal.title,
+          serviceName: proposal.service,
           serviceFee: proposal.value,
           fileUrl: proposal.attachmentUrl || req.file?.path,
           attachmentFile: req.file,
@@ -174,7 +175,7 @@ export const createProposal = async (req, res, next) => {
 // @route POST /api/proposals/send-email
 export const sendProposalDirectEmail = async (req, res, next) => {
   try {
-    const { proposalId, recipientEmail, clientName, proposalNumber, title, serviceFee, fileUrl } = req.body;
+    const { proposalId, recipientEmail, clientName, proposalNumber, title, serviceName, serviceFee, fileUrl } = req.body;
     const to = (recipientEmail || req.body.to || req.body.clientEmail || "").trim();
 
     if (!to) {
@@ -192,6 +193,14 @@ export const sendProposalDirectEmail = async (req, res, next) => {
       } catch (err) {}
     }
 
+    let targetServiceName = serviceName || req.body.service || req.body.serviceName;
+    if (proposalId && !targetServiceName) {
+      try {
+        const existingProp = await Proposal.findById(proposalId);
+        if (existingProp?.service) targetServiceName = existingProp.service;
+      } catch (err) {}
+    }
+
     const docUrl = req.file?.path || fileUrl;
 
     try {
@@ -200,6 +209,7 @@ export const sendProposalDirectEmail = async (req, res, next) => {
         clientName: clientName || "Valued Client",
         proposalNumber: proposalNumber || "N/A",
         title: title || "Proposal",
+        serviceName: targetServiceName,
         serviceFee: serviceFee || "0",
         fileUrl: docUrl || undefined,
         attachmentFile: req.file,

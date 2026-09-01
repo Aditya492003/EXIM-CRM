@@ -9,6 +9,7 @@ export const sendProposalEmail = async ({
   clientName,
   proposalNumber,
   title,
+  serviceName,
   serviceFee,
   fileUrl,
   attachmentFile,
@@ -28,7 +29,8 @@ export const sendProposalEmail = async ({
     throw new Error("Recipient client email address is required to send proposal email");
   }
 
-  const subject = `Proposal: ${title || proposalNumber || "Business Engagement Letter"} - ASC Group`;
+  const engagementTitle = serviceName || title || "Advisory Services";
+  const subject = `Proposal: ${engagementTitle} (${proposalNumber || "Business Engagement Letter"}) - ASC Group`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
@@ -43,8 +45,7 @@ export const sendProposalEmail = async ({
         </p>
         <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 16px; margin: 20px 0; border-radius: 8px;">
           <p style="margin: 0 0 8px 0; font-size: 13px;"><strong>Proposal Ref:</strong> ${proposalNumber || "N/A"}</p>
-          <p style="margin: 0 0 8px 0; font-size: 13px;"><strong>Engagement Title:</strong> ${title || "Advisory Services"}</p>
-          <p style="margin: 0; font-size: 13px;"><strong>Commercial Fee:</strong> ₹${serviceFee || "0"}</p>
+          <p style="margin: 0; font-size: 13px;"><strong>Engagement Title:</strong> ${engagementTitle}</p>
         </div>
         ${
           fileUrl

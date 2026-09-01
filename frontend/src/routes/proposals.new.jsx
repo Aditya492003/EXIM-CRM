@@ -56,7 +56,6 @@ const DEFAULT_PLACEHOLDERS = [
   { key: "client_name", label: "Client Company", category: "Client" },
   { key: "client_email", label: "Client Email", category: "Client" },
   { key: "address", label: "Client Address", category: "Client" },
-  { key: "service_fee", label: "Service Fee (₹)", category: "Commercial" },
   { key: "proposal_no", label: "Proposal Number", category: "General" },
   { key: "validity", label: "Validity Period", category: "Commercial" },
 ];
@@ -159,11 +158,12 @@ function NewProposalPage() {
         setSaved(true);
 
         // Open Email Success Pop-up Modal!
+        const selectedServiceName = serviceObj?.title || serviceObj?.name || formData.service || formData.service_name || "Advisory Services";
         setEmailSuccessModalData({
           to: targetEmail || "Client Email",
           clientName: formData.client_name || clientObj?.name || "Client",
           proposalNo: formData.proposal_no || "PRO-2026-001",
-          serviceFee: formData.service_fee || "0",
+          serviceName: selectedServiceName,
           docName: `${formData.client_name || "Proposal"}_${formData.proposal_no || "PRO"}.docx`.replace(/[^a-zA-Z0-9._-]/g, "_"),
           message: res.data?.emailMessage || "Proposal email & compiled edited document delivered directly via Nodemailer!",
         });
@@ -190,12 +190,14 @@ function NewProposalPage() {
     try {
       setSendingDirectEmail(true);
       const compiledFile = generateCompiledDocxFile();
+      const selectedServiceName = serviceObj?.title || serviceObj?.name || formData.service || formData.service_name || "Advisory Services";
 
       const fd = new FormData();
       fd.append("recipientEmail", targetEmail);
       fd.append("clientName", formData.client_name || clientObj?.name || "Client");
       fd.append("proposalNumber", formData.proposal_no || "PRO-2026-001");
       fd.append("title", `${formData.client_name || "Client"} - Proposal`);
+      fd.append("serviceName", selectedServiceName);
       fd.append("serviceFee", String(formData.service_fee || "0"));
 
       if (compiledFile) {
@@ -214,7 +216,7 @@ function NewProposalPage() {
           to: targetEmail || "Client Email",
           clientName: formData.client_name || clientObj?.name || "Client",
           proposalNo: formData.proposal_no || "PRO-2026-001",
-          serviceFee: formData.service_fee || "0",
+          serviceName: selectedServiceName,
           docName: `${formData.client_name || "Proposal"}_${formData.proposal_no || "PRO"}.docx`.replace(/[^a-zA-Z0-9._-]/g, "_"),
           message: res.data?.message || `Proposal email & edited document delivered directly to ${targetEmail}!`,
         });
@@ -1285,8 +1287,8 @@ function EmailSuccessModal({ data, onClose, onExport }) {
           </div>
 
           <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
-            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Commercial Value</span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{data.serviceFee}</span>
+            <span className="font-semibold text-muted-foreground uppercase text-[10px] tracking-wider">Engagement Title</span>
+            <span className="font-semibold text-foreground">{data.serviceName || "Advisory Services"}</span>
           </div>
 
           <div className="flex items-center justify-between pt-0.5">
