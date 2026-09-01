@@ -61,8 +61,8 @@ function ProposalsPage() {
         owner: p.owner || "Team Member",
         value: p.value ? `₹${Number(p.value).toLocaleString("en-IN")}` : "—",
         status: p.status || "Draft",
-        sentDate: p.sentDate 
-          ? new Date(p.sentDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) 
+        sentDate: p.sentDate
+          ? new Date(p.sentDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
           : (p.createdDate ? new Date(p.createdDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"),
         validUntil: p.validTill ? new Date(p.validTill).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"
       })));
@@ -200,7 +200,6 @@ function ProposalsPage() {
                   <th className="px-4 py-3">Client</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Sent Date</th>
-                  <th className="px-4 py-3">Valid Until</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -230,7 +229,6 @@ function ProposalsPage() {
                       </select>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{p.sentDate}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{p.validUntil}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => handleDelete(p)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
                         <Trash2 size={14} />
