@@ -120,7 +120,7 @@ function ProposalsPage() {
     { label: "Total Proposals", value: proposalList.length, tone: "from-indigo-500 to-violet-500", icon: FileText },
     { label: "Approved", value: proposalList.filter(p => p.status === "Approved").length, tone: "from-emerald-500 to-teal-500", icon: CheckCircle2 },
     { label: "Under Review", value: proposalList.filter(p => p.status === "Under Review" || p.status === "Sent").length, tone: "from-amber-500 to-orange-500", icon: Clock3 },
-    { label: "Pipeline Value", value: `₹${(proposalTotals.pipelineValue / 100000).toFixed(1)}L`, tone: "from-rose-500 to-pink-500", icon: DollarSign },
+    { label: "Draft Proposals", value: proposalList.filter(p => p.status === "Draft").length, tone: "from-purple-500 to-indigo-500", icon: FileText },
   ];
 
   return (
@@ -198,7 +198,6 @@ function ProposalsPage() {
                   <th className="px-4 py-3">Proposal #</th>
                   <th className="px-4 py-3">Title / Service</th>
                   <th className="px-4 py-3">Client</th>
-                  <th className="px-4 py-3">Value</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Sent Date</th>
                   <th className="px-4 py-3">Valid Until</th>
@@ -208,7 +207,7 @@ function ProposalsPage() {
               <tbody className="divide-y divide-border">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
                       <div className="mt-2 text-xs">Loading proposals from MongoDB...</div>
                     </td>
@@ -221,7 +220,6 @@ function ProposalsPage() {
                       <div className="text-[11px] text-muted-foreground">{p.service}</div>
                     </td>
                     <td className="px-4 py-3 text-xs font-medium">{p.client}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-600">{p.value}</td>
                     <td className="px-4 py-3">
                       <select
                         value={p.status}
@@ -242,7 +240,7 @@ function ProposalsPage() {
                 ))}
                 {!loading && rows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
                       No proposals match filter criteria.
                     </td>
                   </tr>

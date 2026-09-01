@@ -1216,7 +1216,6 @@ function NewProposalPage() {
                 <div className="mt-4 space-y-2.5">
                   <SummaryRow label="Client" value={formData.client_name || "—"} />
                   <SummaryRow label="Contact" value={formData.contact_person || "—"} />
-                  <SummaryRow label="Fee" value={`₹${formData.service_fee || "—"}`} />
                   <SummaryRow label="Template" value={selectedTemplate.name} />
                 </div>
               </div>
