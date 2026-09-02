@@ -139,8 +139,17 @@ export const createProposal = async (req, res, next) => {
     }
 
     let emailResult = null;
-    let emailErrorMsg = null;
-    if (recipientEmail && (status === "Sent" || req.body.sendEmail !== false)) {
+    const shouldSendEmail = (status === "Sent" || req.body.sendEmail === "true" || req.body.sendEmail === true);
+
+    if (shouldSendEmail) {
+      if (!recipientEmail) {
+        await Proposal.findByIdAndDelete(proposal._id);
+        return res.status(400).json({
+          success: false,
+          message: "Recipient client email address is required to send proposal. Proposal was not saved.",
+        });
+      }
+
       try {
         emailResult = await sendProposalEmail({
           to: recipientEmail,
@@ -155,8 +164,13 @@ export const createProposal = async (req, res, next) => {
           senderPass,
         });
       } catch (eErr) {
-        console.error("Failed to send automatic proposal email:", eErr.message);
-        emailErrorMsg = eErr.message;
+        console.error("Failed to send proposal email, rolling back database record:", eErr.message);
+        // Rollback database creation when email fails!
+        await Proposal.findByIdAndDelete(proposal._id);
+        return res.status(400).json({
+          success: false,
+          message: `Email delivery failed: ${eErr.message}. Proposal was not saved.`,
+        });
       }
     }
 
@@ -164,7 +178,7 @@ export const createProposal = async (req, res, next) => {
       success: true,
       data: proposal,
       emailSent: emailResult?.success || false,
-      emailMessage: emailResult?.message || (emailErrorMsg ? `Proposal saved, but email error: ${emailErrorMsg}` : undefined),
+      emailMessage: emailResult?.message || "Proposal created successfully",
     });
   } catch (error) {
     next(error);

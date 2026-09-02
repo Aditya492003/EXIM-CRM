@@ -299,6 +299,70 @@ function NewProposalPage() {
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [serviceSearchQuery, setServiceSearchQuery] = useState("");
 
+  /* Direct Own Template Upload States (Does NOT save to Template Library) */
+  const [isDirectUploadMode, setIsDirectUploadMode] = useState(false);
+  const [directFile, setDirectFile] = useState(null);
+  const [sendingDirectCustomEmail, setSendingDirectCustomEmail] = useState(false);
+  const directFileInputRef = useRef(null);
+
+  const handleSendDirectCustomFile = async () => {
+    const targetEmail = (formData.client_email || clientObj?.email || "").trim();
+    if (!targetEmail) {
+      toast.error("Please enter or select a client company email address");
+      return;
+    }
+    if (!directFile) {
+      toast.error("Please select a Word (.docx/.doc) or PDF file from your computer");
+      return;
+    }
+
+    try {
+      setSendingDirectCustomEmail(true);
+      const selectedClientName = formData.client_name || clientObj?.name || "Client";
+      const selectedServiceName = serviceObj?.title || serviceObj?.name || formData.service || formData.service_name || "Advisory Services";
+      const numericValue = parseFloat(String(formData.service_fee || serviceObj?.price || "").replace(/[^0-9.]/g, "")) || 0;
+
+      const fd = new FormData();
+      fd.append("title", `${selectedClientName} - Proposal`);
+      fd.append("client", selectedClientName);
+      fd.append("clientEmail", targetEmail);
+      fd.append("service", selectedServiceName);
+      fd.append("value", String(numericValue));
+      fd.append("status", "Sent");
+      fd.append("assignedTo", assignedTo || "");
+      fd.append("sendEmail", "true");
+      fd.append("attachment", directFile);
+
+      const res = await api.post("/proposals", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (res.data?.success) {
+        toast.success(`Proposal email & custom template document delivered to ${targetEmail}!`);
+        setSaved(true);
+
+        const proposalRefNo = res.data?.data?.number || formData.proposal_no || "PRO-2026-001";
+
+        setEmailSuccessModalData({
+          to: targetEmail,
+          clientName: selectedClientName,
+          proposalNo: proposalRefNo,
+          serviceName: selectedServiceName,
+          docName: directFile.name,
+          message: res.data?.emailMessage || `Proposal email & custom template document delivered directly to ${targetEmail}! Recorded in Proposals Sent list.`,
+        });
+
+        // Advance to export step
+        setStepIdx(5);
+      }
+    } catch (err) {
+      console.error("Failed to send direct email with custom template", err);
+      toast.error(err.response?.data?.message || "Failed to send direct proposal email");
+    } finally {
+      setSendingDirectCustomEmail(false);
+    }
+  };
+
   /* Form Data for Placeholders */
   const [formData, setFormData] = useState({
     date: new Date().toLocaleDateString("en-GB"),
@@ -329,23 +393,23 @@ function NewProposalPage() {
 
     // 1. Company / Client Name variations
     if (["company_name", "companyname", "company", "client_name", "clientname", "client", "client_company", "company_title"].includes(t)) {
-      if (currentClientObj?.name) return currentClientObj.name;
+      if (currentClientObj?.name) return String(currentClientObj.name);
     }
 
     // 2. Company / Client Email variations
     if (["client_email", "company_email", "email", "clientemail", "companyemail"].includes(t)) {
-      if (currentClientObj?.email) return currentClientObj.email;
+      if (currentClientObj?.email) return String(currentClientObj.email);
     }
 
     // 3. Company / Client Address variations
     if (["address", "client_address", "company_address", "clientaddress", "companyaddress"].includes(t)) {
-      if (currentClientObj?.address) return currentClientObj.address;
+      if (currentClientObj?.address) return String(currentClientObj.address);
       if (currentClientObj?.industry) return `${currentClientObj.industry} Sector`;
     }
 
     // 4. Contact Person variations
     if (["contact_person", "contactperson", "contact_name", "contact", "client_contact", "attn"].includes(t)) {
-      if (currentClientObj?.primaryContact) return currentClientObj.primaryContact;
+      if (currentClientObj?.primaryContact) return String(currentClientObj.primaryContact);
     }
 
     // 5. Date variations
@@ -355,7 +419,7 @@ function NewProposalPage() {
 
     // 6. Service Name variations
     if (["service", "service_name", "servicename", "advisory_service", "job", "job_name"].includes(t)) {
-      if (currentServiceObj?.name) return currentServiceObj.name;
+      if (currentServiceObj?.name) return String(currentServiceObj.name);
     }
 
     // 7. Service Fee variations
@@ -367,7 +431,7 @@ function NewProposalPage() {
       }
     }
 
-    return prevFormData?.[tag] ?? "";
+    return String(prevFormData?.[tag] || "");
   };
 
   /* Auto-fill placeholders when Client changes */
@@ -564,7 +628,7 @@ function NewProposalPage() {
   const canNext =
     (stepIdx === 0 && client) ||
     (stepIdx === 1 && service) ||
-    (stepIdx === 2 && selectedTemplate) ||
+    (stepIdx === 2 && (selectedTemplate || (isDirectUploadMode && directFile))) ||
     stepIdx === 3 ||
     (stepIdx === 4 && saved) ||
     stepIdx === 5;
@@ -788,8 +852,155 @@ function NewProposalPage() {
   });
 
   const TemplateStep = (
-    <div className="space-y-4">
-      <StepHeader step={3} title="Choose DOCX Template" sub="Select from your uploaded templates or use the built-in standard template." />
+    <div className="space-y-5">
+      <StepHeader step={3} title="Choose Proposal Option" sub="Select a standard template for live editing, OR send a direct proposal email using your own pre-edited Word/PDF file." />
+
+      {/* Option A: Send Direct Email using Own Template / File (No Live Editing & NOT Saved in Template Library) */}
+      <div className={cn(
+        "rounded-2xl border-2 transition-all p-4.5 space-y-3.5",
+        isDirectUploadMode
+          ? "border-amber-500 bg-amber-50/50 ring-2 ring-amber-200/60 dark:bg-amber-950/20 dark:ring-amber-500/30 dark:border-amber-500"
+          : "border-indigo-200 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-card hover:border-indigo-400 dark:border-indigo-900/60 dark:from-indigo-950/20 dark:via-purple-950/10"
+      )}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-tr from-amber-500 to-rose-500 text-white shadow-md shadow-amber-500/20">
+              <Upload size={20} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-extrabold text-foreground">Send Direct Email using Own Template / File</h4>
+                <span className="rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30">
+                  Direct Send — No Live Editor
+                </span>
+                <span className="rounded-full bg-slate-100 text-slate-700 text-[10px] font-medium px-2 py-0.5 border border-slate-200 dark:bg-slate-800 dark:text-slate-300">
+                  Not Saved in Template Library
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Have your own pre-edited Word document (.docx, .doc) or PDF (.pdf)? Select file & dispatch directly to company's email address.
+              </p>
+            </div>
+          </div>
+          {!isDirectUploadMode && (
+            <button
+              onClick={() => {
+                setIsDirectUploadMode(true);
+                if (directFileInputRef.current) directFileInputRef.current.click();
+              }}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:shadow-lg transition cursor-pointer"
+            >
+              <Upload size={14} /> Select Computer File
+            </button>
+          )}
+        </div>
+
+        {/* Hidden File Input */}
+        <input
+          type="file"
+          ref={directFileInputRef}
+          accept=".docx,.doc,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              setDirectFile(file);
+              setIsDirectUploadMode(true);
+            }
+          }}
+        />
+
+        {/* Expanded Direct Upload Interface */}
+        {isDirectUploadMode && (
+          <div className="pt-3 border-t border-amber-200/70 dark:border-amber-800/60 space-y-4">
+            {!directFile ? (
+              <div
+                onClick={() => directFileInputRef.current?.click()}
+                className="cursor-pointer rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-card p-6 text-center hover:bg-muted/50 transition flex flex-col items-center justify-center gap-2"
+              >
+                <div className="h-10 w-10 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                  <Upload size={20} />
+                </div>
+                <div className="text-xs font-bold text-foreground">Click here to browse your computer for Word (.docx, .doc) or PDF (.pdf) file</div>
+                <div className="text-[11px] text-muted-foreground">The selected file will be emailed directly to the company and recorded in your Sent Proposals list.</div>
+              </div>
+            ) : (
+              <div className="space-y-4 bg-card rounded-xl p-4 border border-amber-200 dark:border-amber-900/80 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs text-white shadow-sm",
+                      directFile.name.toLowerCase().endsWith(".pdf") ? "bg-rose-600" : "bg-blue-600"
+                    )}>
+                      {directFile.name.toLowerCase().endsWith(".pdf") ? "PDF" : "DOCX"}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold truncate max-w-[280px]" title={directFile.name}>{directFile.name}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {(directFile.size / (1024 * 1024)).toFixed(2)} MB · Custom File Selected
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => directFileInputRef.current?.click()}
+                    className="text-xs text-amber-600 font-semibold hover:underline cursor-pointer"
+                  >
+                    Choose Different File
+                  </button>
+                </div>
+
+                {/* Recipient Company & Service Confirmation */}
+                <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recipient Company Email</label>
+                    <input
+                      value={formData.client_email ?? ""}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, client_email: e.target.value }))}
+                      placeholder="Enter company email address…"
+                      className={inputCls + " text-xs font-medium"}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Selected Advisory Service</label>
+                    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 font-semibold text-foreground truncate">
+                      {serviceObj?.name || formData.service || "Advisory Services"} (Fee: ₹{formData.service_fee || serviceObj?.price || "0"})
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border">
+                  <button
+                    onClick={() => {
+                      setIsDirectUploadMode(false);
+                      setDirectFile(null);
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground font-medium cursor-pointer"
+                  >
+                    ← Switch back to Live Editor Templates
+                  </button>
+                  <button
+                    onClick={handleSendDirectCustomFile}
+                    disabled={sendingDirectCustomEmail}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-amber-500/25 hover:shadow-xl transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Send size={14} />
+                    {sendingDirectCustomEmail ? "Sending Direct Email…" : `Send Direct Email to ${formData.client_name || clientObj?.name || "Company"}`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="relative flex items-center justify-center my-2">
+        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+        <span className="relative bg-card px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+          OR Choose Standard Live Editor Template
+        </span>
+      </div>
 
       {/* Smart suggestion notification banner */}
       {serviceObj && (
@@ -808,16 +1019,16 @@ function NewProposalPage() {
         <input
           value={templateSearch}
           onChange={(e) => setTemplateSearch(e.target.value)}
-          placeholder="Search templates…"
+          placeholder="Search live editor templates…"
           className="w-full rounded-xl border border-border bg-card px-9 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200/60 dark:focus:ring-indigo-500/30"
         />
       </div>
 
       {/* Selected indicator */}
-      {selectedTemplate && (
+      {!isDirectUploadMode && selectedTemplate && (
         <div className="flex items-center gap-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 px-3 py-2 text-xs">
           <CheckCircle2 size={14} className="text-indigo-600 shrink-0" />
-          <span className="font-semibold text-indigo-700 dark:text-indigo-300">Selected:</span>
+          <span className="font-semibold text-indigo-700 dark:text-indigo-300">Selected for Live Editing:</span>
           <span className="text-indigo-800 dark:text-indigo-200">{selectedTemplate.name}</span>
         </div>
       )}
@@ -831,17 +1042,18 @@ function NewProposalPage() {
           <a href="/proposals/templates" className="text-indigo-600 underline">Upload one →</a>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-[420px] overflow-y-auto pr-1">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-[380px] overflow-y-auto pr-1">
           {sortedTemplates.map((t) => {
             const tid = t._id || t.id;
-            const isSelected = selectedTemplate?.id === tid || selectedTemplate?._id === t._id;
+            const isSelected = !isDirectUploadMode && (selectedTemplate?.id === tid || selectedTemplate?._id === t._id);
             const matchScore = serviceObj?.name ? getTemplateScore(serviceObj.name, t) : 0;
             const isAutoMatched = matchScore >= 20;
 
             return (
               <button
                 key={tid}
-                onClick={() =>
+                onClick={() => {
+                  setIsDirectUploadMode(false);
                   setSelectedTemplate({
                     id: tid,
                     _id: t._id,
@@ -850,8 +1062,8 @@ function NewProposalPage() {
                     category: t.category,
                     format: t.format || "DOCX",
                     isBuiltIn: t.isBuiltIn || false,
-                  })
-                }
+                  });
+                }}
                 className={cn(
                   "rounded-2xl border-2 p-4 text-left transition cursor-pointer relative",
                   isSelected
@@ -894,16 +1106,16 @@ function NewProposalPage() {
         </div>
       )}
 
-      {/* Quick link to upload more */}
+      {/* Quick link to upload template */}
       <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-        <span>Need a different template?</span>
+        <span>Need to save a reusable template for future proposals?</span>
         <a
           href="/proposals/templates"
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-indigo-600 font-semibold hover:underline"
         >
-          <Plus size={12} /> Upload Template
+          <Plus size={12} /> Go to Templates Library
         </a>
       </div>
     </div>
@@ -1286,11 +1498,30 @@ function NewProposalPage() {
                 <ArrowLeft size={13} /> Previous
               </button>
               <button
-                onClick={() => setStepIdx((s) => Math.min(STEPS.length - 1, s + 1))}
-                disabled={!canNext || stepIdx === STEPS.length - 1}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-indigo-500/20 disabled:opacity-40"
+                onClick={() => {
+                  if (stepIdx === 2 && isDirectUploadMode) {
+                    if (directFile) {
+                      handleSendDirectCustomFile();
+                    } else {
+                      toast.error("Please select a Word (.docx/.doc) or PDF file from your computer");
+                    }
+                    return;
+                  }
+                  setStepIdx((s) => Math.min(STEPS.length - 1, s + 1));
+                }}
+                disabled={!canNext || stepIdx === STEPS.length - 1 || sendingDirectCustomEmail}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-indigo-500/20 disabled:opacity-40 cursor-pointer"
               >
-                Next <ArrowRight size={13} />
+                {stepIdx === 2 && isDirectUploadMode ? (
+                  <>
+                    <Send size={13} />
+                    {sendingDirectCustomEmail ? "Sending Email…" : "Send Direct Email Now"}
+                  </>
+                ) : (
+                  <>
+                    Next <ArrowRight size={13} />
+                  </>
+                )}
               </button>
             </div>
           </div>

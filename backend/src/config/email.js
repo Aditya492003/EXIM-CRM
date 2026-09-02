@@ -16,12 +16,20 @@ export const sendProposalEmail = async ({
   senderEmail,
   senderPass,
 }) => {
+  // Always dynamically re-read .env from disk so credential changes take effect immediately
+  dotenv.config({ override: true });
+
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = parseInt(process.env.SMTP_PORT || "587", 10);
-  const user = (senderEmail || process.env.SMTP_USER || process.env.EMAIL_USER || "").trim();
-  const rawPass = (senderPass || process.env.SMTP_PASS || process.env.EMAIL_PASS || "").trim();
-  const pass = rawPass.replace(/\s+/g, ""); // Remove spaces from App Password
-  const from = user ? `"EXIM Nexus CRM" <${user}>` : `"EXIM Nexus CRM" <no-reply@exim-crm.com>`;
+
+  const envUser = (process.env.SMTP_USER || process.env.EMAIL_USER || "").trim();
+  const envPass = (process.env.SMTP_PASS || process.env.EMAIL_PASS || "").trim().replace(/\s+/g, "");
+
+  let user = (senderEmail || envUser).trim();
+  let pass = (senderPass || envPass).trim().replace(/\s+/g, "");
+
+  if (!user && envUser) user = envUser;
+  if (!pass && envPass) pass = envPass;
 
   const targetEmail = (to || "").trim();
 
@@ -66,13 +74,24 @@ export const sendProposalEmail = async ({
 
   // Build attachments list for Nodemailer
   const attachments = [];
-  const cleanDocName = `${(proposalNumber || "Proposal").replace(/[^a-zA-Z0-9._-]/g, "_")}_Final.docx`;
+  const origName = attachmentFile?.originalname || "";
+  const isPdf = origName.toLowerCase().endsWith(".pdf") || (attachmentFile?.mimetype === "application/pdf");
+  const isDoc = origName.toLowerCase().endsWith(".doc") || (attachmentFile?.mimetype === "application/msword");
+  const defaultExt = isPdf ? ".pdf" : (isDoc ? ".doc" : ".docx");
+  const cleanDocName = origName || `${(proposalNumber || "Proposal").replace(/[^a-zA-Z0-9._-]/g, "_")}_Final${defaultExt}`;
+  
+  let dynamicContentType = attachmentFile?.mimetype;
+  if (!dynamicContentType) {
+    if (isPdf) dynamicContentType = "application/pdf";
+    else if (isDoc) dynamicContentType = "application/msword";
+    else dynamicContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
 
   if (attachmentFile?.buffer) {
     attachments.push({
-      filename: attachmentFile.originalname || cleanDocName,
+      filename: cleanDocName,
       content: attachmentFile.buffer,
-      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      contentType: dynamicContentType,
     });
   } else {
     const targetUrl = attachmentFile?.path || fileUrl;
@@ -82,10 +101,11 @@ export const sendProposalEmail = async ({
           const resp = await fetch(targetUrl);
           if (resp.ok) {
             const ab = await resp.arrayBuffer();
+            const respContentType = resp.headers.get("content-type") || dynamicContentType;
             attachments.push({
               filename: cleanDocName,
               content: Buffer.from(ab),
-              contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              contentType: respContentType,
             });
           } else {
             attachments.push({
@@ -112,22 +132,27 @@ export const sendProposalEmail = async ({
     }
   }
 
-  if (!user) {
-    throw new Error(`Sender email address missing. Please configure SMTP_USER in backend/.env.`);
-  }
+  const sendMailAttempt = async (activeUser, activePass) => {
+    if (!activeUser || !activePass) {
+      throw new Error(`Sender email or password missing. Please configure SMTP_USER & SMTP_PASS in backend/.env.`);
+    }
 
-  if (!pass) {
-    throw new Error(`Sender App Password missing for ${user}. Please configure SMTP_PASS in backend/.env.`);
-  }
+    const from = `"EXIM Nexus CRM" <${activeUser}>`;
+    const isGmail = host.includes("gmail") || activeUser.endsWith("@gmail.com");
+    const transporterConfig = isGmail
+      ? {
+          service: "gmail",
+          auth: { user: activeUser, pass: activePass },
+        }
+      : {
+          host,
+          port,
+          secure: port === 465,
+          auth: { user: activeUser, pass: activePass },
+          tls: { rejectUnauthorized: false },
+        };
 
-  try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-      tls: { rejectUnauthorized: false },
-    });
+    const transporter = nodemailer.createTransport(transporterConfig);
 
     const mailOptions = {
       from,
@@ -141,18 +166,38 @@ export const sendProposalEmail = async ({
     }
 
     const info = await transporter.sendMail(mailOptions);
+    return { activeUser, info };
+  };
 
-    console.log(`✅ [Nodemailer Direct Email Delivered] From: ${user} -> To: ${targetEmail} | MessageId: ${info.messageId}`);
+  try {
+    let dispatchResult;
+    try {
+      dispatchResult = await sendMailAttempt(user, pass);
+    } catch (primaryErr) {
+      // If primary send failed and we have fallback env credentials, attempt retry with env credentials!
+      if (envUser && envPass && (user !== envUser || pass !== envPass)) {
+        console.warn(`Primary SMTP auth failed (${user}), retrying with fallback env credentials (${envUser})...`);
+        dispatchResult = await sendMailAttempt(envUser, envPass);
+      } else {
+        throw primaryErr;
+      }
+    }
+
+    console.log(`✅ [Nodemailer Direct Email Delivered] From: ${dispatchResult.activeUser} -> To: ${targetEmail} | MessageId: ${dispatchResult.info.messageId}`);
     return {
       success: true,
-      sender: user,
+      sender: dispatchResult.activeUser,
       recipient: targetEmail,
-      messageId: info.messageId,
+      messageId: dispatchResult.info.messageId,
       message: `Proposal email successfully delivered to ${targetEmail}!`,
     };
   } catch (error) {
     console.error(`❌ [Nodemailer SMTP Error] Failed to send email from ${user} to ${targetEmail}:`, error.message);
-    throw new Error(`SMTP Mail Delivery Failed (${user}): ${error.message}`);
+    let userMsg = error.message;
+    if (error.message.includes("401") || error.message.includes("535") || error.message.includes("Invalid status code") || error.message.includes("BadCredentials")) {
+      userMsg = `Gmail SMTP Authentication Failed for sender (${user}). Invalid 16-character Google App Password or bad credentials (401/535). Please ensure SMTP_PASS in backend/.env is a valid 16-character Google App Password (not login password).`;
+    }
+    throw new Error(userMsg);
   }
 };
 
