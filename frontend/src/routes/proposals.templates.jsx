@@ -93,6 +93,8 @@ function TemplatesPage() {
     rawArray.forEach((f) => {
       if (!f.name.toLowerCase().endsWith(".docx")) {
         toast.error(`Security Restriction: "${f.name}" blocked. Only .docx (Microsoft Word) template files are allowed.`);
+      } else if (f.size > 10 * 1024 * 1024) {
+        toast.error(`File size error: "${f.name}" exceeds maximum allowed upload limit of 10MB (${(f.size / (1024 * 1024)).toFixed(1)}MB).`);
       } else {
         validDocxFiles.push(f);
       }

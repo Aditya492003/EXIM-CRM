@@ -904,6 +904,11 @@ function NewProposalPage() {
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) {
+              if (file.size > 10 * 1024 * 1024) {
+                toast.error(`File size limit error: "${file.name}" exceeds 10MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB). Please select a file smaller than 10MB.`);
+                e.target.value = "";
+                return;
+              }
               setDirectFile(file);
               setIsDirectUploadMode(true);
             }
