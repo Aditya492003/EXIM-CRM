@@ -171,9 +171,22 @@ function ContactsPage() {
                     <td className="px-4 py-3 text-xs">{c.phone}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{c.email}</td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => handleDeleteContact(c)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setEditing(c)}
+                          title="Edit Contact"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 cursor-pointer"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteContact(c)}
+                          title="Delete Contact"
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 cursor-pointer"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -184,12 +197,13 @@ function ContactsPage() {
       </div>
 
       {openAdd && <AddContactModal onClose={() => setOpenAdd(false)} onSuccess={fetchContacts} />}
+      {editing && <EditContactModal contact={editing} onClose={() => setEditing(null)} onSuccess={fetchContacts} />}
     </AppLayout>
   );
 }
 
 // Searchable Company Combobox Component for Contacts
-export function CompanySearchSelect({ value, onChange, onCompanySelect }) {
+export function CompanySearchSelect({ value, onChange, onCompanySelect, required = false }) {
   const api = useApi();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -221,7 +235,7 @@ export function CompanySearchSelect({ value, onChange, onCompanySelect }) {
   return (
     <div className="relative">
       <input
-        required
+        required={required}
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
@@ -229,7 +243,7 @@ export function CompanySearchSelect({ value, onChange, onCompanySelect }) {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Type or select company from database…"
+        placeholder="Type or select company from database (Optional)…"
         className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400"
       />
       {open && (
@@ -260,7 +274,7 @@ export function CompanySearchSelect({ value, onChange, onCompanySelect }) {
             ) : (
               <div className="p-2.5 text-center text-xs text-muted-foreground">
                 No matching company found.
-                <div className="text-[10px] text-indigo-600 mt-0.5 font-medium">New company name will be saved with this contact.</div>
+                <div className="text-[10px] text-indigo-600 mt-0.5 font-medium">Company name will be saved with this contact.</div>
               </div>
             )}
           </div>
@@ -321,8 +335,9 @@ export function AddContactModal({ onClose, onSuccess, defaultCompany = "", defau
             <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Ramesh Shah" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold">Company *</label>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Company (Optional)</label>
             <CompanySearchSelect
+              required={false}
               value={formData.company}
               onChange={(val) => setFormData({ ...formData, company: val })}
               onCompanySelect={(c) => {
@@ -352,6 +367,87 @@ export function AddContactModal({ onClose, onSuccess, defaultCompany = "", defau
             <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">Cancel</button>
             <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50">
               {submitting && <Loader2 size={14} className="animate-spin" />} Create Contact
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export function EditContactModal({ contact, onClose, onSuccess }) {
+  const api = useApi();
+  const [submitting, setSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    name: contact?.name || "",
+    company: contact?.company || "",
+    companyId: contact?.companyId || undefined,
+    designation: contact?.designation || "",
+    phone: contact?.phone || "",
+    email: contact?.email || "",
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await api.put(`/contacts/${contact._id || contact.id}`, formData);
+      toast.success("Contact updated successfully");
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error("Update contact error", err);
+      toast.error(err.response?.data?.message || "Failed to update contact");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-background p-6 shadow-2xl animate-scale-in">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <h2 className="text-lg font-bold">Edit Contact Details</h2>
+          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={16} /></button>
+        </div>
+        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">Full Name *</label>
+            <input required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Ramesh Shah" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-muted-foreground">Company (Link or update company)</label>
+            <CompanySearchSelect
+              required={false}
+              value={formData.company}
+              onChange={(val) => setFormData({ ...formData, company: val })}
+              onCompanySelect={(c) => {
+                setFormData(prev => ({
+                  ...prev,
+                  company: c ? c.name : prev.company,
+                  companyId: c ? (c._id || c.id) : undefined,
+                }));
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Designation</label>
+              <input value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} placeholder="e.g. Import Manager" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">Phone</label>
+              <input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+91 98765 43210" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">Email *</label>
+            <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="ramesh@acme.com" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none" />
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <button type="button" onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted cursor-pointer">Cancel</button>
+            <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md cursor-pointer disabled:opacity-50">
+              {submitting && <Loader2 size={14} className="animate-spin" />} Save Changes
             </button>
           </div>
         </form>
