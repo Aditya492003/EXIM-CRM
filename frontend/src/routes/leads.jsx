@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   ArrowUpDown, Calendar, ChevronDown, ChevronLeft, ChevronRight, Columns3, Download,
@@ -45,6 +45,7 @@ const ALL_COLUMNS = [
 const DEFAULT_COLUMNS = ["lead", "company", "service", "status"];
 
 function LeadsPage() {
+  const navigate = useNavigate();
   const api = useApi();
   const [leadsList, setLeadsList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,6 +135,28 @@ function LeadsPage() {
         toast.error("Failed to update status in DB");
         fetchLeads();
       }
+    }
+
+    if (newStatus === "Proposal Sent" && currentLead) {
+      const companyName = (currentLead.company && currentLead.company.trim() !== "") ? currentLead.company.trim() : (currentLead.name || "Client");
+      const contactPerson = currentLead.name || "";
+      const email = currentLead.email || "";
+      const service = currentLead.service || "";
+
+      toast.success(`Proposal Sent selected! Navigating to template stage for ${companyName}...`);
+      setTimeout(() => {
+        navigate({
+          to: "/proposals/new",
+          search: {
+            clientName: companyName,
+            contactPerson: contactPerson,
+            clientEmail: email,
+            serviceName: service,
+            directMode: "true",
+            fromLead: "true"
+          }
+        });
+      }, 300);
     }
   };
 

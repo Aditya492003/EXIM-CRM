@@ -122,6 +122,77 @@ function NewProposalPage() {
       .finally(() => setLoadingTemplates(false));
   }, [api]);
 
+  /* Auto-load Lead parameters from URL if redirected from Lead status "Proposal Sent" */
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const qClientName = searchParams.get("clientName");
+    const qContactPerson = searchParams.get("contactPerson");
+    const qClientEmail = searchParams.get("clientEmail");
+    const qServiceName = searchParams.get("serviceName");
+    const qDirectMode = searchParams.get("directMode");
+    const qFromLead = searchParams.get("fromLead");
+
+    if (qClientName || qClientEmail || qServiceName || qFromLead === "true") {
+      const finalClientName = qClientName || qContactPerson || "Lead Client";
+      const finalContactPerson = qContactPerson || qClientName || "Primary Contact";
+      const finalEmail = qClientEmail || "";
+      const finalService = qServiceName || "";
+
+      // 1. Pre-select Client State
+      setClient("custom-lead-client");
+      setClientObj({
+        _id: "lead-client",
+        name: finalClientName,
+        email: finalEmail,
+        primaryContact: finalContactPerson,
+        address: `${finalClientName} Office`,
+      });
+
+      // 2. Pre-select Service State if present
+      if (finalService) {
+        setService("custom-lead-service");
+        setServiceObj({
+          _id: "lead-service",
+          name: finalService,
+          title: finalService,
+        });
+      }
+
+      // 3. Pre-fill Form Data Placeholders
+      setFormData((prev) => {
+        const updated = { ...prev };
+        ["client_name", "company_name", "companyname", "company", "client", "client_company", "company_title"].forEach((key) => {
+          updated[key] = finalClientName;
+        });
+        ["client_email", "company_email", "email", "clientemail", "companyemail"].forEach((key) => {
+          updated[key] = finalEmail;
+        });
+        ["contact_person", "contactperson", "contact_name", "contact", "client_contact"].forEach((key) => {
+          updated[key] = finalContactPerson;
+        });
+        ["address", "client_address", "company_address", "clientaddress", "companyaddress"].forEach((key) => {
+          updated[key] = updated[key] || `${finalClientName} Office`;
+        });
+        if (finalService) {
+          ["service", "service_name", "servicename", "advisory_service", "job", "job_name"].forEach((key) => {
+            updated[key] = finalService;
+          });
+        }
+        return updated;
+      });
+
+      // 4. Jump directly to Template stage (Step 3: index = 2)
+      setStepIdx(2);
+
+      // 5. Activate Direct Upload Mode
+      if (qDirectMode === "true" || qFromLead === "true") {
+        setIsDirectUploadMode(true);
+      }
+
+      toast.success(`✨ Loaded lead details for "${finalClientName}" (${finalEmail || "No email"}). Template stage active!`);
+    }
+  }, []);
+
   const generateCompiledDocxFile = () => {
     if (!templateBuffer) return null;
     try {

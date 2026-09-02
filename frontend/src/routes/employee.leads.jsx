@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -31,6 +31,7 @@ const statusColors = {
 };
 
 function EmployeeLeadsPage() {
+  const navigate = useNavigate();
   const api = useApi();
   const [leads, setLeads] = useState([]);
   const [search, setSearch] = useState("");
@@ -70,6 +71,28 @@ function EmployeeLeadsPage() {
     } catch (error) {
       toast.error("Failed to update status — please try again");
       fetchLeads();
+    }
+
+    if (status === "Proposal Sent" && currentLead) {
+      const companyName = (currentLead.company && currentLead.company.trim() !== "") ? currentLead.company.trim() : (currentLead.name || "Client");
+      const contactPerson = currentLead.name || "";
+      const email = currentLead.email || "";
+      const service = currentLead.service || "";
+
+      toast.success(`Proposal Sent selected! Navigating to template stage for ${companyName}...`);
+      setTimeout(() => {
+        navigate({
+          to: "/proposals/new",
+          search: {
+            clientName: companyName,
+            contactPerson: contactPerson,
+            clientEmail: email,
+            serviceName: service,
+            directMode: "true",
+            fromLead: "true"
+          }
+        });
+      }, 300);
     }
   };
 
