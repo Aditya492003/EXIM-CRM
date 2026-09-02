@@ -321,12 +321,114 @@ export const updateLead = async (req, res, next) => {
       return res.status(403).json({ success: false, message: "Collaborators cannot transfer lead ownership." });
     }
 
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+    const userClerkId = req.user?.clerkId;
+
+    // Check if company is being set or updated on the lead
+    const companyInput = req.body.company !== undefined ? req.body.company : existing.company;
+    const nameInput = req.body.name !== undefined ? req.body.name : existing.name;
+    const phoneInput = req.body.phone !== undefined ? req.body.phone : existing.phone;
+    const emailInput = req.body.email !== undefined ? req.body.email : existing.email;
+
+    let companyRecord = null;
+    let contactRecord = null;
+
+    if (companyInput && companyInput.trim()) {
+      const companyClean = companyInput.trim();
+      const allCompanies = await Company.find({}).lean();
+
+      // Find company in workspace using intelligent fuzzy matching
+      companyRecord = allCompanies.find((c) => {
+        const isWorkspace = c.workspaceManagerId === workspaceManagerId ||
+                            c.createdByClerkId === workspaceManagerId ||
+                            c.sharedWithManagerIds?.includes(workspaceManagerId);
+        return isWorkspace && areCompanyNamesMatching(c.name, companyClean);
+      });
+
+      // If company doesn't exist in workspace, create it automatically
+      if (!companyRecord) {
+        let managerName = req.user?.workspaceManagerName || req.user?.name || "Workspace Manager";
+        let managerEmail = req.user?.email || "";
+
+        companyRecord = await Company.create({
+          name: companyClean,
+          phone: req.body.companyPhone || phoneInput || "",
+          email: req.body.companyEmail || emailInput || "",
+          website: req.body.websiteUrl || "",
+          assignedManager: req.user?.name || managerName,
+          assignedManagerClerkId: userClerkId,
+          workspaceManagerId: workspaceManagerId,
+          createdByClerkId: userClerkId,
+          ownerManagerName: managerName,
+          ownerManagerEmail: managerEmail,
+          status: "Active",
+        });
+      }
+
+      // Link or create the contact person under this company
+      if (companyRecord && nameInput && nameInput.trim()) {
+        const nameClean = nameInput.trim();
+        const nameRegex = new RegExp(`^${nameClean.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+
+        const contactFilterConds = [
+          { name: nameRegex, companyId: companyRecord._id }
+        ];
+        if (emailInput && emailInput.trim()) {
+          contactFilterConds.push({ email: emailInput.trim(), email: { $ne: "" } });
+        }
+
+        contactRecord = await Contact.findOne({
+          $or: contactFilterConds,
+          $or: [
+            { workspaceManagerId: workspaceManagerId },
+            { createdByClerkId: workspaceManagerId }
+          ]
+        });
+
+        if (contactRecord) {
+          // Update existing contact record with company link and latest details
+          contactRecord.company = companyRecord.name;
+          contactRecord.companyId = companyRecord._id;
+          if (phoneInput) contactRecord.phone = phoneInput;
+          if (emailInput) contactRecord.email = emailInput;
+          await contactRecord.save();
+        } else {
+          // Create new Contact record in MongoDB linked to this company!
+          contactRecord = await Contact.create({
+            name: nameClean,
+            company: companyRecord.name,
+            companyId: companyRecord._id,
+            phone: phoneInput || "",
+            email: emailInput || "",
+            createdByClerkId: userClerkId,
+            workspaceManagerId: workspaceManagerId,
+          });
+        }
+
+        // Set primaryContact on Company if missing
+        if (!companyRecord.primaryContact) {
+          await Company.findByIdAndUpdate(companyRecord._id, {
+            primaryContact: nameClean,
+            primaryContactId: contactRecord._id,
+          });
+        }
+
+        req.body.company = companyRecord.name;
+        req.body.companyId = companyRecord._id;
+        req.body.contactId = contactRecord._id;
+      }
+    }
+
     const updaterName = req.user?.name || "User";
     const timelineEntry = {
       activity: `Lead details updated by ${updaterName}`,
       performedBy: updaterName,
       timestamp: new Date(),
     };
+
+    if (companyRecord && contactRecord) {
+      timelineEntry.activity += ` (Contact "${contactRecord.name}" linked to Company "${companyRecord.name}")`;
+    }
 
     const lead = await Lead.findOneAndUpdate(
       query,
