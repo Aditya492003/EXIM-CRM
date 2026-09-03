@@ -65,10 +65,11 @@ export const requestFcmToken = async () => {
     const msg = await getFirebaseMessaging();
     if (!msg) return null;
 
-    // Register Service Worker
+    // Register and wait for Service Worker to become active
     let swRegistration = null;
     if ("serviceWorker" in navigator) {
-      swRegistration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
+      swRegistration = await navigator.serviceWorker.ready;
     }
 
     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
