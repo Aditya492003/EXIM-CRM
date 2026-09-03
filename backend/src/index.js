@@ -68,7 +68,11 @@ app.use(
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
-// Health check
+// Root & Health check
+app.get("/", (req, res) => {
+  res.status(200).json({ success: true, message: "EXIM Nexus CRM Backend API is running", health: "/api/health" });
+});
+
 app.get("/api/health", (req, res) => {
   res.status(200).json({ success: true, message: "EXIM CRM API is running", timestamp: new Date() });
 });
