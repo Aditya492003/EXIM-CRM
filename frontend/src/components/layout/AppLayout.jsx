@@ -5,6 +5,7 @@ import { TopBar } from "./TopBar";
 import { LandingPage } from "@/routes/landing";
 import { EmployeeLayout } from "./EmployeeLayout";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useApi } from "@/lib/api";
 
 export function AppLayout({ children }) {
   const { isSignedIn, isLoaded, getToken } = useAuth();
@@ -14,15 +15,13 @@ export function AppLayout({ children }) {
   // Initialize push notification listener & token sync
   usePushNotifications();
 
+  const api = useApi();
+
   useEffect(() => {
     async function sync() {
       if (isSignedIn && user?.publicMetadata?.role === "employee" && !syncedRef.current) {
         try {
-          const token = await getToken();
-          await fetch("http://localhost:5000/api/employees/sync", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          await api.post("/employees/sync");
           syncedRef.current = true;
         } catch (e) {
           console.error("Failed to sync employee record:", e);
@@ -30,7 +29,7 @@ export function AppLayout({ children }) {
       }
     }
     sync();
-  }, [isSignedIn, user, getToken]);
+  }, [isSignedIn, user, api]);
 
   if (!isLoaded) {
     return (

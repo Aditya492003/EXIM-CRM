@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useApi } from "@/lib/api";
 
 const statuses = [
   { label: "Available", value: "Available", color: "bg-emerald-500", textCls: "text-emerald-700 dark:text-emerald-400", bgCls: "bg-emerald-50 dark:bg-emerald-500/10" },
@@ -23,20 +24,14 @@ export function EmployeeTopBar() {
   // In a real app, fetch initial status from backend on mount.
   // For now, default to Available, and update via API on change.
   
+  const api = useApi();
+
   const handleStatusChange = async (statusObj) => {
     setCurrentStatus(statusObj);
     setDropdownOpen(false);
-    
+
     try {
-      const token = await getToken();
-      await fetch("http://localhost:5000/api/employees/status", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ workingStatus: statusObj.value })
-      });
+      await api.patch("/employees/status", { workingStatus: statusObj.value });
     } catch (error) {
       console.error("Failed to update status", error);
     }
