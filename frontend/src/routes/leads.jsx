@@ -69,6 +69,9 @@ function LeadsPage() {
   const [favorites, setFavorites] = useState(new Set());
   const [visibleCols, setVisibleCols] = useState(new Set(DEFAULT_COLUMNS));
   const [openColumns, setOpenColumns] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [dateTypeFilter, setDateTypeFilter] = useState("created"); // 'created' | 'lastContact' | 'nextFollowUp'
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -88,6 +91,10 @@ function LeadsPage() {
         assignedTo: l.assignedTo || "Nikhil Rao",
         status: l.status || "New",
         isFavorite: l.isFavorite || false,
+        rawCreatedDate: l.createdDate ? new Date(l.createdDate) : (l.createdAt ? new Date(l.createdAt) : null),
+        rawLastContacted: l.lastContacted ? new Date(l.lastContacted) : null,
+        rawNextFollowUp: l.nextFollowUp ? new Date(l.nextFollowUp) : null,
+        rawMeetingDate: l.meetingDate ? new Date(l.meetingDate) : null,
         createdDate: l.createdDate ? new Date(l.createdDate).toLocaleDateString("en-IN") : "",
         lastContacted: l.lastContacted ? new Date(l.lastContacted).toLocaleDateString("en-IN") : "",
         nextFollowUp: l.nextFollowUp ? new Date(l.nextFollowUp).toLocaleDateString("en-IN") : "",
@@ -299,8 +306,9 @@ function LeadsPage() {
     if (serviceFilter !== "All") count++;
     if (enquiryFilter !== "All") count++;
     if (regionFilter.trim() !== "") count++;
+    if (startDate || endDate) count++;
     return count;
-  }, [statusFilter, sourceFilter, assignedFilter, serviceFilter, enquiryFilter, regionFilter]);
+  }, [statusFilter, sourceFilter, assignedFilter, serviceFilter, enquiryFilter, regionFilter, startDate, endDate]);
 
   const resetFilters = useCallback(() => {
     setStatusFilter("All");
@@ -309,6 +317,9 @@ function LeadsPage() {
     setServiceFilter("All");
     setEnquiryFilter("All");
     setRegionFilter("");
+    setStartDate("");
+    setEndDate("");
+    setDateTypeFilter("created");
   }, []);
 
   const filtered = useMemo(() => {
@@ -321,6 +332,22 @@ function LeadsPage() {
     if (regionFilter.trim()) {
       const r = regionFilter.toLowerCase().trim();
       out = out.filter((l) => l.region && l.region.toLowerCase().includes(r));
+    }
+
+    if (startDate || endDate) {
+      const start = startDate ? new Date(startDate + "T00:00:00") : null;
+      const end = endDate ? new Date(endDate + "T23:59:59.999") : null;
+      out = out.filter((l) => {
+        let target = null;
+        if (dateTypeFilter === "lastContact") target = l.rawLastContacted;
+        else if (dateTypeFilter === "nextFollowUp") target = l.rawNextFollowUp;
+        else target = l.rawCreatedDate;
+
+        if (!target || isNaN(target.getTime())) return false;
+        if (start && target < start) return false;
+        if (end && target > end) return false;
+        return true;
+      });
     }
 
     if (quick === "New Leads") out = out.filter((l) => l.status === "New");
@@ -356,7 +383,7 @@ function LeadsPage() {
       );
     }
     return out;
-  }, [leadsList, statusFilter, sourceFilter, assignedFilter, serviceFilter, enquiryFilter, regionFilter, quick, search, favorites]);
+  }, [leadsList, statusFilter, sourceFilter, assignedFilter, serviceFilter, enquiryFilter, regionFilter, startDate, endDate, dateTypeFilter, quick, search, favorites]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -450,7 +477,7 @@ function LeadsPage() {
 
         {/* Search & Actions Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3 shadow-sm">
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" size={16} />
             <input
               value={search}
@@ -459,11 +486,52 @@ function LeadsPage() {
               className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
             />
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Date Range Filter */}
+            <div className="flex items-center gap-1.5 rounded-xl border border-border bg-background px-2.5 py-1.5 text-xs text-foreground shadow-xs">
+              <Calendar size={13} className="text-muted-foreground shrink-0" />
+              <select
+                value={dateTypeFilter}
+                onChange={(e) => setDateTypeFilter(e.target.value)}
+                className="bg-transparent text-[11px] font-semibold outline-none cursor-pointer text-foreground"
+                title="Filter by date field"
+              >
+                <option value="created">Created</option>
+                <option value="lastContact">Contacted</option>
+                <option value="nextFollowUp">Follow-up</option>
+              </select>
+              <span className="text-muted-foreground text-[10px]">|</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-transparent text-[11px] outline-none cursor-pointer text-foreground w-[105px]"
+                title="Start Date"
+              />
+              <span className="text-muted-foreground text-[10px]">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-transparent text-[11px] outline-none cursor-pointer text-foreground w-[105px]"
+                title="End Date"
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => { setStartDate(""); setEndDate(""); }}
+                  className="ml-0.5 text-muted-foreground hover:text-rose-500 cursor-pointer p-0.5 rounded hover:bg-muted"
+                  title="Clear date range"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400"
+              className="rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400 cursor-pointer"
             >
               <option value="All">All Statuses</option>
               {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -475,6 +543,13 @@ function LeadsPage() {
         {activeFilterCount > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
             <span className="text-muted-foreground font-medium text-[11px]">Active Filters:</span>
+            {(startDate || endDate) && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                <Calendar size={11} />
+                {dateTypeFilter === "lastContact" ? "Contacted" : dateTypeFilter === "nextFollowUp" ? "Follow-up" : "Created"}: {startDate || "Start"} → {endDate || "End"}
+                <button onClick={() => { setStartDate(""); setEndDate(""); }} className="hover:text-indigo-900 cursor-pointer"><X size={12} /></button>
+              </span>
+            )}
             {statusFilter !== "All" && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
                 Status: {statusFilter}
@@ -673,6 +748,9 @@ function LeadsPage() {
           serviceFilter={serviceFilter} setServiceFilter={setServiceFilter}
           enquiryFilter={enquiryFilter} setEnquiryFilter={setEnquiryFilter}
           regionFilter={regionFilter} setRegionFilter={setRegionFilter}
+          startDate={startDate} setStartDate={setStartDate}
+          endDate={endDate} setEndDate={setEndDate}
+          dateTypeFilter={dateTypeFilter} setDateTypeFilter={setDateTypeFilter}
           availableSources={availableSources}
           availableAssigned={availableAssigned}
           availableServices={availableServices}
@@ -1924,21 +2002,131 @@ function FilterLeadsModal({
   serviceFilter, setServiceFilter,
   enquiryFilter, setEnquiryFilter,
   regionFilter, setRegionFilter,
+  startDate, setStartDate,
+  endDate, setEndDate,
+  dateTypeFilter, setDateTypeFilter,
   availableSources, availableAssigned, availableServices,
   onReset
 }) {
+  const setPresetRange = (type) => {
+    const today = new Date();
+    const formatDate = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    if (type === "today") {
+      const str = formatDate(today);
+      setStartDate(str);
+      setEndDate(str);
+    } else if (type === "yesterday") {
+      const y = new Date(today);
+      y.setDate(y.getDate() - 1);
+      const str = formatDate(y);
+      setStartDate(str);
+      setEndDate(str);
+    } else if (type === "7days") {
+      const past = new Date(today);
+      past.setDate(past.getDate() - 7);
+      setStartDate(formatDate(past));
+      setEndDate(formatDate(today));
+    } else if (type === "30days") {
+      const past = new Date(today);
+      past.setDate(past.getDate() - 30);
+      setStartDate(formatDate(past));
+      setEndDate(formatDate(today));
+    } else if (type === "thisMonth") {
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDate(formatDate(startOfMonth));
+      setEndDate(formatDate(today));
+    } else if (type === "clear") {
+      setStartDate("");
+      setEndDate("");
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl animate-scale-in space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div>
             <h2 className="text-lg font-bold">Filter Leads</h2>
-            <p className="text-xs text-muted-foreground">Filter lead records across status, source, advisor, service, and region.</p>
+            <p className="text-xs text-muted-foreground">Filter lead records across date ranges, status, source, advisor, and region.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted cursor-pointer"><X size={16} /></button>
         </div>
 
         <div className="space-y-4 text-xs">
+          {/* Date Range Section */}
+          <div className="rounded-xl border border-border/80 bg-muted/20 p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="font-semibold text-foreground flex items-center gap-1.5">
+                <Calendar size={13} className="text-indigo-500" /> Date Range Filter
+              </label>
+              <select
+                value={dateTypeFilter}
+                onChange={(e) => setDateTypeFilter(e.target.value)}
+                className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold outline-none focus:border-indigo-400 cursor-pointer"
+              >
+                <option value="created">Created Date</option>
+                <option value="lastContact">Last Contacted</option>
+                <option value="nextFollowUp">Next Follow-up</option>
+              </select>
+            </div>
+
+            {/* Quick Preset Buttons */}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: "Today", val: "today" },
+                { label: "Yesterday", val: "yesterday" },
+                { label: "Last 7 Days", val: "7days" },
+                { label: "Last 30 Days", val: "30days" },
+                { label: "This Month", val: "thisMonth" },
+              ].map((p) => (
+                <button
+                  key={p.val}
+                  type="button"
+                  onClick={() => setPresetRange(p.val)}
+                  className="rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium hover:bg-muted transition cursor-pointer"
+                >
+                  {p.label}
+                </button>
+              ))}
+              {(startDate || endDate) && (
+                <button
+                  type="button"
+                  onClick={() => setPresetRange("clear")}
+                  className="rounded-lg border border-rose-200 bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-300 px-2 py-1 text-[11px] font-medium transition cursor-pointer"
+                >
+                  Clear Date
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-[11px] text-muted-foreground">From Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs outline-none focus:border-indigo-400 cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] text-muted-foreground">To Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-1.5 text-xs outline-none focus:border-indigo-400 cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="mb-1.5 block font-semibold text-foreground">Lead Status</label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium outline-none focus:border-indigo-400 cursor-pointer">
