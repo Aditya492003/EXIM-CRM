@@ -160,6 +160,7 @@ export const inviteEmployee = async (req, res, next) => {
 
     // 2. Create Clerk Invitation (Clerk handles sending the official invitation email)
     let invitationId = null;
+    const frontendUrl = req.headers.origin || process.env.CLIENT_URL || "http://localhost:5173";
     try {
       const invitation = await clerkClient.invitations.createInvitation({
         emailAddress: normalizedEmail,
@@ -169,7 +170,7 @@ export const inviteEmployee = async (req, res, next) => {
           invitedBy: managerClerkId,
           role: "employee",
         },
-        redirectUrl: process.env.CLIENT_URL || "http://localhost:5173",
+        redirectUrl: frontendUrl,
       });
       invitationId = invitation.id;
     } catch (cErr) {
