@@ -1,5 +1,6 @@
 import Meeting from "../models/Meeting.js";
 import Lead from "../models/Lead.js";
+import { sendPushNotification } from "../services/pushNotificationService.js";
 
 // Helper: build workspace-isolated filter
 const userFilter = (req, extra = {}) => {
@@ -142,6 +143,23 @@ export const createMeeting = async (req, res, next) => {
       }
     }
 
+    // Dispatch FCM Push Notification to assigned employee
+    const creatorName = req.user?.name || req.user?.email || "Manager";
+    if (meeting.assignedTo && meeting.assignedTo !== creatorName) {
+      const dateFormatted = meeting.date ? new Date(meeting.date).toLocaleDateString("en-IN") : "";
+      sendPushNotification({
+        targetClerkIds: meeting.assignedToClerkId ? [meeting.assignedToClerkId] : [],
+        targetNames: [meeting.assignedTo],
+        title: "New Meeting Assigned",
+        body: `Meeting "${meeting.title}"${dateFormatted ? ` on ${dateFormatted}` : ""} at ${meeting.time || ""} has been assigned to you.`,
+        senderName: creatorName,
+        senderClerkId: req.user?.clerkId,
+        workspaceManagerId,
+        data: { type: "MEETING_ASSIGNED", meetingId: String(meeting._id) },
+        url: "/meetings",
+      }).catch((err) => console.error("Push dispatch error on createMeeting:", err));
+    }
+
     res.status(201).json({ success: true, data: meeting });
   } catch (error) {
     next(error);
@@ -205,6 +223,22 @@ export const updateMeetingOutcome = async (req, res, next) => {
 
     if (!meeting) {
       return res.status(404).json({ success: false, message: "Meeting not found or not assigned to you" });
+    }
+
+    // Dispatch FCM Push Notification to Meeting Organizer / Manager
+    const employeeName = req.user?.name || req.user?.email || "Employee";
+    const managerTargetClerkId = meeting.organizedByClerkId || meeting.workspaceManagerId;
+    if (managerTargetClerkId && managerTargetClerkId !== req.user?.clerkId) {
+      sendPushNotification({
+        targetClerkIds: [managerTargetClerkId],
+        title: "Meeting Outcome Updated",
+        body: `${employeeName} updated outcome for "${meeting.title}": ${outcomeStatus}${outcomeNotes ? ` - ${outcomeNotes}` : ""}`,
+        senderName: employeeName,
+        senderClerkId: req.user?.clerkId,
+        workspaceManagerId: meeting.workspaceManagerId,
+        data: { type: "MEETING_OUTCOME_UPDATED", meetingId: String(meeting._id) },
+        url: "/meetings",
+      }).catch((err) => console.error("Push dispatch error on updateMeetingOutcome:", err));
     }
 
     res.status(200).json({ success: true, data: meeting });

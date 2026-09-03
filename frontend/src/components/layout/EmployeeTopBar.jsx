@@ -1,9 +1,10 @@
 import { cn } from "@/lib/utils";
 import { UserButton, useUser, useAuth } from "@clerk/clerk-react";
-import { Calendar, Search, Bell, ChevronDown, Sun, Moon, User } from "lucide-react";
+import { Calendar, Search, Bell, ChevronDown, Sun, Moon, User, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { Button } from "@/components/ui/button";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const statuses = [
   { label: "Available", value: "Available", color: "bg-emerald-500", textCls: "text-emerald-700 dark:text-emerald-400", bgCls: "bg-emerald-50 dark:bg-emerald-500/10" },
@@ -17,6 +18,7 @@ export function EmployeeTopBar() {
   const { dark, toggleDark } = useTheme();
   const [currentStatus, setCurrentStatus] = useState(statuses[0]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { permission, enableNotifications, loading: pushLoading } = usePushNotifications();
 
   // In a real app, fetch initial status from backend on mount.
   // For now, default to Available, and update via API on change.
@@ -96,6 +98,24 @@ export function EmployeeTopBar() {
             </div>
           )}
         </div>
+
+        {/* Push Notification Bell */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => enableNotifications(true)}
+          title={permission === "granted" ? "Push Notifications Active" : "Click to Enable Push Notifications"}
+          className="relative rounded-xl cursor-pointer"
+        >
+          {pushLoading ? (
+            <Loader2 size={18} className="animate-spin text-indigo-500" />
+          ) : (
+            <Bell size={18} className={cn(permission === "granted" && "text-indigo-600")} />
+          )}
+          {permission !== "granted" && (
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-background animate-pulse" />
+          )}
+        </Button>
 
         {/* Theme Toggle */}
         <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer" onClick={toggleDark}>

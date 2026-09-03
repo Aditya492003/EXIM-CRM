@@ -11,7 +11,7 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 
-# ── Environment Variables (CRITICAL — NEVER COMMIT) ──
+# ── Environment Variables & Secrets (CRITICAL — NEVER COMMIT) ──
 .env
 .env.local
 .env.development
@@ -20,6 +20,9 @@ pnpm-debug.log*
 .env.test.local
 .env.production
 .env.production.local
+firebase-service-account.json
+*firebase-adminsdk*.json
+!*firebase-service-account.example.json
 
 # ── Build Outputs ─────────────────────────────────────
 dist/

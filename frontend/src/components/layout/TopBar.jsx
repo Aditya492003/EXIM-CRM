@@ -1,7 +1,7 @@
 import {
   Bell, Plus, Search, Moon, Sun, LayoutDashboard, Users,
   Building2, Handshake, Globe, UserPlus, FileText, Calendar,
-  Loader2, ArrowRight, X
+  Loader2, ArrowRight, X, BellRing
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/ThemeContext";
 import { useApi } from "@/lib/api";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function TopBar() {
   const { dark, toggleDark } = useTheme();
   const [openSearch, setOpenSearch] = useState(false);
   const { user } = useUser();
+  const { permission, enableNotifications, loading: pushLoading } = usePushNotifications();
 
   // Global Ctrl+K / Cmd+K keyboard shortcut listener
   useEffect(() => {
@@ -66,9 +68,21 @@ export function TopBar() {
           <Button variant="ghost" size="icon" className="rounded-xl cursor-pointer" onClick={toggleDark}>
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </Button>
-          <Button variant="ghost" size="icon" className="relative rounded-xl cursor-pointer">
-            <Bell size={18} />
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-background" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => enableNotifications(true)}
+            title={permission === "granted" ? "Push Notifications Active" : "Click to Enable Push Notifications"}
+            className="relative rounded-xl cursor-pointer"
+          >
+            {pushLoading ? (
+              <Loader2 size={18} className="animate-spin text-indigo-500" />
+            ) : (
+              <Bell size={18} className={cn(permission === "granted" && "text-indigo-600")} />
+            )}
+            {permission !== "granted" && (
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-background animate-pulse" />
+            )}
           </Button>
 
           {/* Clerk Auth Managed Button */}

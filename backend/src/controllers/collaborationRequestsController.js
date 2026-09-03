@@ -4,6 +4,7 @@ import Deal from "../models/Deal.js";
 import Notification from "../models/Notification.js";
 import Employee from "../models/Employee.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
+import { sendPushNotification } from "../services/pushNotificationService.js";
 
 // @desc  Create a collaboration request for a duplicate Lead or Deal
 // @route POST /api/collaboration-requests
@@ -125,6 +126,19 @@ export const createCollaborationRequest = async (req, res, next) => {
       });
     } catch (nErr) {}
 
+    // Dispatch FCM Push Notification to Owner & Manager
+    sendPushNotification({
+      targetClerkIds: [ownerClerkId, ownerManagerId].filter(Boolean),
+      targetEmails: [ownerManagerEmail].filter(Boolean),
+      title: "New Collaboration Request",
+      body: `${requesterName} requested collaboration on ${entityType.toLowerCase()} "${title}".`,
+      senderName: requesterName,
+      senderClerkId: requesterClerkId,
+      workspaceManagerId: ownerManagerId,
+      data: { type: "COLLABORATION_REQUEST_RECEIVED", requestId: String(request._id) },
+      url: "/collaboration",
+    }).catch((err) => console.error("Push dispatch error on createCollaborationRequest:", err));
+
     res.status(201).json({
       success: true,
       message: `Collaboration request for ${entityType.toLowerCase()} "${title}" sent successfully!`,
@@ -234,6 +248,19 @@ export const approveCollaborationRequest = async (req, res, next) => {
       });
     } catch (nErr) {}
 
+    // Dispatch FCM Push Notification to Requester
+    sendPushNotification({
+      targetClerkIds: [request.requesterClerkId].filter(Boolean),
+      targetEmails: [request.requesterEmail].filter(Boolean),
+      title: "Collaboration Request Approved!",
+      body: `${approverName} approved your collaboration request for ${request.entityType.toLowerCase()} "${request.entityTitle}".`,
+      senderName: approverName,
+      senderClerkId: userClerkId,
+      workspaceManagerId: request.requesterManagerId,
+      data: { type: "COLLABORATION_REQUEST_APPROVED", requestId: String(request._id) },
+      url: "/collaboration",
+    }).catch((err) => console.error("Push dispatch error on approveCollaborationRequest:", err));
+
     res.status(200).json({
       success: true,
       message: `Collaboration request approved! ${request.requesterName} is now an active collaborator.`,
@@ -286,6 +313,19 @@ export const rejectCollaborationRequest = async (req, res, next) => {
         read: false,
       });
     } catch (nErr) {}
+
+    // Dispatch FCM Push Notification to Requester
+    sendPushNotification({
+      targetClerkIds: [request.requesterClerkId].filter(Boolean),
+      targetEmails: [request.requesterEmail].filter(Boolean),
+      title: "Collaboration Request Declined",
+      body: `${approverName} declined your collaboration request for ${request.entityType.toLowerCase()} "${request.entityTitle}".`,
+      senderName: approverName,
+      senderClerkId: userClerkId,
+      workspaceManagerId: request.requesterManagerId,
+      data: { type: "COLLABORATION_REQUEST_REJECTED", requestId: String(request._id) },
+      url: "/collaboration",
+    }).catch((err) => console.error("Push dispatch error on rejectCollaborationRequest:", err));
 
     res.status(200).json({
       success: true,

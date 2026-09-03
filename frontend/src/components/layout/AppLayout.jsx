@@ -4,11 +4,15 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { LandingPage } from "@/routes/landing";
 import { EmployeeLayout } from "./EmployeeLayout";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function AppLayout({ children }) {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
   const syncedRef = useRef(false);
+
+  // Initialize push notification listener & token sync
+  usePushNotifications();
 
   useEffect(() => {
     async function sync() {

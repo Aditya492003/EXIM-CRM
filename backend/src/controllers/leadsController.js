@@ -2,8 +2,10 @@ import Lead from "../models/Lead.js";
 import Deal from "../models/Deal.js";
 import Company from "../models/Company.js";
 import Contact from "../models/Contact.js";
+import Employee from "../models/Employee.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
 import { areCompanyNamesMatching } from "../utils/companyUtils.js";
+import { sendPushNotification } from "../services/pushNotificationService.js";
 
 // Helper: build workspace-isolated filter (includes active collaboration leads)
 const userFilter = (req, extra = {}) => {
@@ -284,18 +286,46 @@ export const createLead = async (req, res, next) => {
       });
     }
 
+    let resolvedAssignedToClerkId = req.body.assignedToClerkId || null;
+    if (!resolvedAssignedToClerkId && assignedTo) {
+      const assignedEmployee = await Employee.findOne({
+        name: new RegExp(`^${assignedTo.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i"),
+      }).select("clerkUserId email");
+      if (assignedEmployee?.clerkUserId) {
+        resolvedAssignedToClerkId = assignedEmployee.clerkUserId;
+      }
+    }
+    if (!resolvedAssignedToClerkId && assignedTo === creatorName) {
+      resolvedAssignedToClerkId = userClerkId;
+    }
+
     const lead = await Lead.create({
       ...req.body,
       companyId: companyRecord?._id || undefined,
       contactId: contactRecord?._id || undefined,
       assignedTo: assignedTo,
       createdByClerkId: userClerkId,
-      assignedToClerkId: req.body.assignedToClerkId || userClerkId,
+      assignedToClerkId: resolvedAssignedToClerkId,
       workspaceManagerId: workspaceManagerId,
       collaborators: [],
       collaboratingWorkspaceIds: [],
       timeline: initialTimeline,
     });
+
+    // Push notification to assigned employee
+    if (lead.assignedTo) {
+      sendPushNotification({
+        targetClerkIds: resolvedAssignedToClerkId ? [resolvedAssignedToClerkId] : [],
+        targetNames: [lead.assignedTo],
+        title: "New Lead Assigned",
+        body: `You have been assigned lead: ${lead.name}${lead.company ? ` (${lead.company})` : ""}`,
+        senderName: creatorName,
+        senderClerkId: userClerkId,
+        workspaceManagerId,
+        data: { type: "LEAD_ASSIGNED", leadId: String(lead._id) },
+        url: "/employee/leads",
+      }).catch((err) => console.error("Push dispatch error on createLead:", err));
+    }
 
     res.status(201).json({
       success: true,
@@ -421,6 +451,16 @@ export const updateLead = async (req, res, next) => {
       }
     }
 
+    // Auto-resolve assignedToClerkId if assignedTo is changed
+    if (req.body.assignedTo && !req.body.assignedToClerkId) {
+      const assignedEmployee = await Employee.findOne({
+        name: new RegExp(`^${req.body.assignedTo.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i"),
+      }).select("clerkUserId");
+      if (assignedEmployee?.clerkUserId) {
+        req.body.assignedToClerkId = assignedEmployee.clerkUserId;
+      }
+    }
+
     const updaterName = req.user?.name || "User";
     const timelineEntry = {
       activity: `Lead details updated by ${updaterName}`,
@@ -437,6 +477,22 @@ export const updateLead = async (req, res, next) => {
       { ...req.body, $push: { timeline: timelineEntry } },
       { new: true, runValidators: true }
     );
+
+    // Push notification if ownership / assignedTo updated
+    if (req.body.assignedTo || lead.assignedTo) {
+      const targetCid = req.body.assignedToClerkId || lead.assignedToClerkId;
+      sendPushNotification({
+        targetClerkIds: targetCid ? [targetCid] : [],
+        targetNames: [req.body.assignedTo || lead.assignedTo],
+        title: "Lead Assigned to You",
+        body: `You have been assigned lead: ${lead.name}${lead.company ? ` (${lead.company})` : ""}`,
+        senderName: updaterName,
+        senderClerkId: userClerkId,
+        workspaceManagerId,
+        data: { type: "LEAD_ASSIGNED", leadId: String(lead._id) },
+        url: "/employee/leads",
+      }).catch((err) => console.error("Push dispatch error on updateLead:", err));
+    }
 
     res.status(200).json({ success: true, data: lead });
   } catch (error) {
@@ -696,6 +752,21 @@ export const convertLeadToDeal = async (req, res, next) => {
       timestamp: new Date(),
     });
     await lead.save();
+
+    // Push notification to assigned employee for converted deal
+    if (deal.assignedTo && deal.assignedTo !== userName) {
+      sendPushNotification({
+        targetClerkIds: deal.assignedToClerkId ? [deal.assignedToClerkId] : [],
+        targetNames: [deal.assignedTo],
+        title: "New Deal Assigned (Converted from Lead)",
+        body: `Deal "${deal.name}" (₹${dealValue.toLocaleString("en-IN")}) has been assigned to you.`,
+        senderName: userName,
+        senderClerkId: userClerkId,
+        workspaceManagerId,
+        data: { type: "DEAL_ASSIGNED", dealId: String(deal._id) },
+        url: "/deals",
+      }).catch((err) => console.error("Push dispatch error on convertLeadToDeal:", err));
+    }
 
     res.status(201).json({
       success: true,

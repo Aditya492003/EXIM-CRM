@@ -123,6 +123,24 @@ function LeadsPage() {
 
   useEffect(() => {
     fetchLeads();
+
+    const handleLiveUpdate = () => {
+      fetchLeads();
+    };
+
+    window.addEventListener("crm:live-update", handleLiveUpdate);
+    window.addEventListener("crm:refresh-leads", handleLiveUpdate);
+
+    // Live auto-sync polling every 12 seconds
+    const interval = setInterval(() => {
+      fetchLeads();
+    }, 12000);
+
+    return () => {
+      window.removeEventListener("crm:live-update", handleLiveUpdate);
+      window.removeEventListener("crm:refresh-leads", handleLiveUpdate);
+      clearInterval(interval);
+    };
   }, [fetchLeads]);
 
   // Real-time backend sync on inline status dropdown change

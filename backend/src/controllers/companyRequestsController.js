@@ -2,6 +2,7 @@ import CompanyRequest from "../models/CompanyRequest.js";
 import Company from "../models/Company.js";
 import Notification from "../models/Notification.js";
 import Employee from "../models/Employee.js";
+import { sendPushNotification } from "../services/pushNotificationService.js";
 
 // @desc  Create a new access request for an existing company
 // @route POST /api/company-requests
@@ -79,6 +80,19 @@ export const createCompanyRequest = async (req, res, next) => {
     } catch (nErr) {
       console.warn("Company request notification creation warning:", nErr.message);
     }
+
+    // Dispatch FCM Push Notification to Company Owner Manager
+    sendPushNotification({
+      targetClerkIds: [ownerManagerId].filter(Boolean),
+      targetEmails: [company.ownerManagerEmail].filter(Boolean),
+      title: "New Company Access Request",
+      body: `${req.user?.name || "A team member"} requested access to company "${company.name}".`,
+      senderName: req.user?.name || "Team Member",
+      senderClerkId: req.user?.clerkId,
+      workspaceManagerId: ownerManagerId,
+      data: { type: "COMPANY_REQUEST_RECEIVED", requestId: String(companyReq._id) },
+      url: "/companies",
+    }).catch((err) => console.error("Push dispatch error on createCompanyRequest:", err));
 
     res.status(201).json({
       success: true,
@@ -159,6 +173,19 @@ export const approveCompanyRequest = async (req, res, next) => {
       });
     } catch (nErr) {}
 
+    // Dispatch FCM Push Notification to Requestor
+    sendPushNotification({
+      targetClerkIds: [request.requestedByClerkId, request.requestorManagerId].filter(Boolean),
+      targetEmails: [request.requestedByEmail].filter(Boolean),
+      title: "Company Access Approved!",
+      body: `Your access request for company "${request.companyName}" has been approved.`,
+      senderName: req.user?.name || "Manager",
+      senderClerkId: req.user?.clerkId,
+      workspaceManagerId: request.requestorManagerId,
+      data: { type: "COMPANY_REQUEST_APPROVED", requestId: String(request._id) },
+      url: "/companies",
+    }).catch((err) => console.error("Push dispatch error on approveCompanyRequest:", err));
+
     res.status(200).json({
       success: true,
       message: `Access approved! "${request.companyName}" is now shared with Manager ${request.requestedByName}'s workspace.`,
@@ -196,6 +223,19 @@ export const rejectCompanyRequest = async (req, res, next) => {
         read: false,
       });
     } catch (nErr) {}
+
+    // Dispatch FCM Push Notification to Requestor
+    sendPushNotification({
+      targetClerkIds: [request.requestedByClerkId, request.requestorManagerId].filter(Boolean),
+      targetEmails: [request.requestedByEmail].filter(Boolean),
+      title: "Company Access Declined",
+      body: `Your access request for company "${request.companyName}" was declined.`,
+      senderName: req.user?.name || "Manager",
+      senderClerkId: req.user?.clerkId,
+      workspaceManagerId: request.requestorManagerId,
+      data: { type: "COMPANY_REQUEST_REJECTED", requestId: String(request._id) },
+      url: "/companies",
+    }).catch((err) => console.error("Push dispatch error on rejectCompanyRequest:", err));
 
     res.status(200).json({
       success: true,

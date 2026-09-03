@@ -1,5 +1,55 @@
 import Notification from "../models/Notification.js";
 import Employee from "../models/Employee.js";
+import DeviceToken from "../models/DeviceToken.js";
+import { sendPushNotification } from "../services/pushNotificationService.js";
+
+// @desc  Register / Save user FCM device token
+// @route POST /api/notifications/fcm-token
+export const saveFCMToken = async (req, res, next) => {
+  try {
+    const { token, deviceInfo } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, message: "Device token is required" });
+    }
+
+    const clerkUserId = req.user?.clerkId;
+    const email = req.user?.email ? req.user.email.toLowerCase() : undefined;
+    const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
+
+    const deviceToken = await DeviceToken.findOneAndUpdate(
+      { token },
+      {
+        clerkUserId,
+        email,
+        workspaceManagerId,
+        deviceInfo: deviceInfo || "Web Browser",
+        lastUsedAt: new Date(),
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(200).json({ success: true, message: "FCM token saved", data: deviceToken });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc  Unregister / Delete FCM device token
+// @route DELETE /api/notifications/fcm-token
+export const deleteFCMToken = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (token) {
+      await DeviceToken.findOneAndDelete({ token });
+    } else if (req.user?.clerkId) {
+      await DeviceToken.deleteMany({ clerkUserId: req.user.clerkId });
+    }
+
+    res.status(200).json({ success: true, message: "FCM token deleted" });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc  Send a notification note to an employee (Manager action)
 // @route POST /api/notifications
@@ -18,7 +68,6 @@ export const sendNotification = async (req, res, next) => {
     }
 
     const senderName = req.body.senderName || req.user?.name || req.user?.email || "Manager";
-
     const workspaceManagerId = req.user?.workspaceManagerId || req.user?.clerkId;
 
     const notification = await Notification.create({
@@ -31,6 +80,19 @@ export const sendNotification = async (req, res, next) => {
       note: note.trim(),
       read: false,
     });
+
+    // Dispatch FCM Push Notification to employee
+    sendPushNotification({
+      targetClerkIds: targetEmployee?.clerkUserId ? [targetEmployee.clerkUserId] : [],
+      targetEmails: targetEmployee?.email ? [targetEmployee.email] : (employeeEmail ? [employeeEmail] : []),
+      title: `Notice from ${senderName}`,
+      body: note.trim(),
+      senderName,
+      senderClerkId: req.user?.clerkId,
+      workspaceManagerId,
+      data: { type: "MANAGER_NOTE", notificationId: String(notification._id) },
+      url: "/employee/leads",
+    }).catch((err) => console.error("Push dispatch error on sendNotification:", err));
 
     res.status(201).json({ success: true, data: notification });
   } catch (error) {

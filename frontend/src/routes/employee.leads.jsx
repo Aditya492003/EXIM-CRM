@@ -55,6 +55,25 @@ function EmployeeLeadsPage() {
 
   useEffect(() => {
     fetchLeads();
+
+    // Listen for live update events from push notifications
+    const handleLiveUpdate = () => {
+      fetchLeads();
+    };
+
+    window.addEventListener("crm:live-update", handleLiveUpdate);
+    window.addEventListener("crm:refresh-leads", handleLiveUpdate);
+
+    // Real-time live auto-sync polling every 12 seconds
+    const interval = setInterval(() => {
+      fetchLeads();
+    }, 12000);
+
+    return () => {
+      window.removeEventListener("crm:live-update", handleLiveUpdate);
+      window.removeEventListener("crm:refresh-leads", handleLiveUpdate);
+      clearInterval(interval);
+    };
   }, [fetchLeads]);
 
   const handleStatusChange = async (id, status) => {

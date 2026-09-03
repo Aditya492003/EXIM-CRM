@@ -1,5 +1,6 @@
 import Deal from "../models/Deal.js";
 import { clerkClient } from "@clerk/clerk-sdk-node";
+import { sendPushNotification } from "../services/pushNotificationService.js";
 
 // Helper: build workspace-isolated filter (includes active collaboration deals)
 const userFilter = (req, extra = {}) => {
@@ -167,6 +168,21 @@ export const createDeal = async (req, res, next) => {
       timeline: initialTimeline,
     });
 
+    // Push notification to assigned employee if assigned to someone else
+    if (deal.assignedTo && deal.assignedTo !== creatorName) {
+      sendPushNotification({
+        targetClerkIds: deal.assignedToClerkId ? [deal.assignedToClerkId] : [],
+        targetNames: [deal.assignedTo],
+        title: "New Deal Assigned",
+        body: `You have been assigned deal: ${deal.name}${deal.company ? ` (${deal.company})` : ""}`,
+        senderName: creatorName,
+        senderClerkId: req.user?.clerkId,
+        workspaceManagerId,
+        data: { type: "DEAL_ASSIGNED", dealId: String(deal._id) },
+        url: "/deals",
+      }).catch((err) => console.error("Push dispatch error on createDeal:", err));
+    }
+
     res.status(201).json({ success: true, data: deal });
   } catch (error) {
     next(error);
@@ -198,6 +214,21 @@ export const updateDeal = async (req, res, next) => {
       new: true,
       runValidators: true,
     });
+
+    // Push notification if ownership / assignedTo changed
+    if (req.body.assignedTo && req.body.assignedTo !== existing.assignedTo) {
+      sendPushNotification({
+        targetClerkIds: req.body.assignedToClerkId ? [req.body.assignedToClerkId] : [],
+        targetNames: [req.body.assignedTo],
+        title: "Deal Assigned to You",
+        body: `You have been assigned deal: ${deal.name}${deal.company ? ` (${deal.company})` : ""}`,
+        senderName: updaterName,
+        senderClerkId: req.user?.clerkId,
+        workspaceManagerId: deal.workspaceManagerId,
+        data: { type: "DEAL_ASSIGNED", dealId: String(deal._id) },
+        url: "/deals",
+      }).catch((err) => console.error("Push dispatch error on updateDeal:", err));
+    }
 
     res.status(200).json({ success: true, data: deal });
   } catch (error) {
