@@ -18,6 +18,8 @@ const userFilter = (req, extra = {}) => {
 
   if (req.user?.role === "employee") {
     const empMatch = [];
+
+
     if (req.user.name) {
       empMatch.push({ assignedTo: req.user.name });
       empMatch.push({ assignedTo: new RegExp(`^${req.user.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") });
@@ -128,7 +130,7 @@ export const createLead = async (req, res, next) => {
             const fName = clerkUser?.firstName || "";
             const lName = clerkUser?.lastName || "";
             ownerManagerName = `${fName} ${lName}`.trim() || clerkUser?.username || "Workspace Manager";
-          } catch (cErr) {}
+          } catch (cErr) { }
         }
 
         let resolvedOwnerName = existingLead.assignedTo;
@@ -166,8 +168,8 @@ export const createLead = async (req, res, next) => {
       // Search for existing Company in current workspace using intelligent fuzzy matching
       companyRecord = allCompanies.find((c) => {
         const isWorkspace = c.workspaceManagerId === workspaceManagerId ||
-                            c.createdByClerkId === workspaceManagerId ||
-                            c.sharedWithManagerIds?.includes(workspaceManagerId);
+          c.createdByClerkId === workspaceManagerId ||
+          c.sharedWithManagerIds?.includes(workspaceManagerId);
         return isWorkspace && areCompanyNamesMatching(c.name, companyClean);
       });
 
@@ -184,7 +186,7 @@ export const createLead = async (req, res, next) => {
               const fName = clerkUser?.firstName || "";
               const lName = clerkUser?.lastName || "";
               ownerManagerName = `${fName} ${lName}`.trim() || clerkUser?.username || ownerManagerName;
-            } catch (cErr) {}
+            } catch (cErr) { }
           }
 
           return res.status(409).json({
@@ -340,8 +342,8 @@ export const updateLead = async (req, res, next) => {
       // Find company in workspace using intelligent fuzzy matching
       companyRecord = allCompanies.find((c) => {
         const isWorkspace = c.workspaceManagerId === workspaceManagerId ||
-                            c.createdByClerkId === workspaceManagerId ||
-                            c.sharedWithManagerIds?.includes(workspaceManagerId);
+          c.createdByClerkId === workspaceManagerId ||
+          c.sharedWithManagerIds?.includes(workspaceManagerId);
         return isWorkspace && areCompanyNamesMatching(c.name, companyClean);
       });
 
@@ -632,7 +634,7 @@ export const convertLeadToDeal = async (req, res, next) => {
             const fName = clerkUser?.firstName || "";
             const lName = clerkUser?.lastName || "";
             ownerManagerName = `${fName} ${lName}`.trim() || clerkUser?.username || "Workspace Manager";
-          } catch (cErr) {}
+          } catch (cErr) { }
         }
         let resolvedOwnerName = existingDeal.assignedTo || ownerManagerName;
 

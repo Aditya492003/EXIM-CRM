@@ -190,19 +190,81 @@ function LeadsPage() {
     }
   };
 
-  const handleExportCSV = async () => {
+  const handleExportCSV = () => {
     try {
-      const res = await api.get("/leads/export/csv", { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const activeCols = ALL_COLUMNS.filter((c) => visibleCols.has(c.key));
+      const colsToExport = activeCols.length > 0 ? activeCols : ALL_COLUMNS;
+      const targetLeads = selected.size > 0
+        ? leadsList.filter((l) => selected.has(l.id))
+        : filtered;
+
+      if (targetLeads.length === 0) {
+        toast.error("No leads available to export");
+        return;
+      }
+
+      const headers = colsToExport.map((c) => c.label);
+      const rows = targetLeads.map((lead) =>
+        colsToExport.map((col) => {
+          let val = "";
+          switch (col.key) {
+            case "lead":
+              val = lead.name || "";
+              break;
+            case "company":
+              val = lead.company || "";
+              break;
+            case "service":
+              val = lead.service || "";
+              break;
+            case "phone":
+              val = lead.phone || "";
+              break;
+            case "email":
+              val = lead.email || "";
+              break;
+            case "source":
+              val = lead.source || "";
+              break;
+            case "assigned":
+              val = lead.assignedTo || "";
+              break;
+            case "status":
+              val = lead.status || "";
+              break;
+            case "created":
+              val = lead.createdDate || "";
+              break;
+            case "lastContact":
+              val = lead.lastContacted || "";
+              break;
+            case "nextFollowUp":
+              val = lead.nextFollowUp || "";
+              break;
+            default:
+              val = lead[col.key] || "";
+          }
+          const escaped = String(val ?? "").replace(/"/g, '""');
+          return `"${escaped}"`;
+        }).join(",")
+      );
+
+      const csvContent = [headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","), ...rows].join("\n");
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "leads.csv");
+      link.setAttribute("download", `leads_export_${new Date().toISOString().slice(0, 10)}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      toast.success("Exported leads to CSV");
+      window.URL.revokeObjectURL(url);
+
+      const countMsg = selected.size > 0 ? `${targetLeads.length} selected lead(s)` : `${targetLeads.length} lead(s)`;
+      toast.success(`Exported ${countMsg} with ${colsToExport.length} column(s) to CSV`);
     } catch (err) {
-      toast.error("Export failed");
+      console.error("Export failed:", err);
+      toast.error("Failed to export leads CSV");
     }
   };
 
