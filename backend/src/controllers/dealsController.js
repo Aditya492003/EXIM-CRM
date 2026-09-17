@@ -337,6 +337,20 @@ export const updateDealNotes = async (req, res, next) => {
       timestamp: new Date(),
     };
 
+    const deal = await Deal.findOneAndUpdate(
+      query,
+      { ...updateData, $push: { timeline: timelineEntry } },
+      { new: true, runValidators: true }
+    );
+
+    if (!deal) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
+
+    res.status(200).json({ success: true, data: deal });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc  Handover deal to execution team (locks deal status)
 // @route POST /api/deals/:id/handover
 export const handoverDeal = async (req, res, next) => {

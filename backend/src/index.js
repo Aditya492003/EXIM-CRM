@@ -55,7 +55,6 @@ app.use(
     credentials: true,
   })
 );
-app.options("*", cors());
 
 // Core body parsing middleware
 app.use(express.json({ limit: "25mb" }));
