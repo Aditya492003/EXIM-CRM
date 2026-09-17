@@ -7,7 +7,7 @@ if (!cached) {
 }
 
 const connectDb = async () => {
-  if (cached.conn) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
@@ -19,6 +19,8 @@ const connectDb = async () => {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
     };
 
     cached.promise = mongoose.connect(process.env.MONGO_URI, opts).then((mongooseInstance) => {
@@ -31,6 +33,7 @@ const connectDb = async () => {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
+    cached.conn = null;
     console.error("❌ MongoDB connection failed:", e.message);
     throw e;
   }
