@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Calendar, DollarSign, Filter, Handshake, LayoutGrid, List, Plus, Search, X,
   MoreHorizontal, GripVertical, FileText, Clock, StickyNote, Video, Pencil, Trash2, CheckCircle2, ChevronRight, Loader2, Building2,
-  Briefcase, IndianRupee, Mail, PhoneCall, ExternalLink, Sparkles, User, Tag, ArrowRight, ChevronDown
+  Briefcase, IndianRupee, Mail, PhoneCall, ExternalLink, Sparkles, User, Tag, ArrowRight, ChevronDown, Send, ShieldCheck, Lock
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { useUser } from "@clerk/clerk-react";
+import { DealHandoverModal } from "@/components/crm/DealHandoverModal";
 
 export const Route = createFileRoute("/deals")({
   component: DealsPage,
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/deals")({
 
 const stages = ["New", "Qualified", "Proposal Sent", "Negotiation", "Won", "Lost"];
 const priorities = ["Low", "Medium", "High"];
-const quickFilters = ["All Deals", "High Priority", "My Deals", "Proposal Sent", "Negotiation", "Won Deals"];
+const quickFilters = ["All Deals", "High Priority", "My Deals", "Proposal Sent", "Negotiation", "Won Deals", "Handed Over"];
 
 const stageColors = {
   New: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800",
@@ -41,6 +42,7 @@ function DealsPage() {
   const [dragMongoId, setDragMongoId] = useState(null);
   const [active, setActive] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [handoverDeal, setHandoverDeal] = useState(null);
   const [view, setView] = useState("kanban");
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState("All Deals");
@@ -61,30 +63,44 @@ function DealsPage() {
       const res = await api.get("/deals");
       const data = res.data?.data || [];
 
-      setDeals(data.map(d => ({
-        id: d.code || d._id,
-        _id: d._id,
-        name: d.name,
-        company: d.company || "",
-        companyId: d.companyId,
-        leadId: d.leadId,
-        contactId: d.contactId,
-        value: d.value || 0,
-        stage: d.stage || "New",
-        priority: d.priority || "Medium",
-        owner: d.assignedTo || "Team Member",
-        assignedTo: d.assignedTo || "Team Member",
-        assignedToClerkId: d.assignedToClerkId,
-        expectedClose: d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString("en-IN") : "",
-        expectedCloseDate: d.expectedCloseDate,
-        closedDate: d.closedDate,
-        createdDate: d.createdDate ? new Date(d.createdDate).toLocaleDateString("en-IN") : "Recently",
-        service: d.service || "DGFT Advisory",
-        serviceId: d.serviceId,
-        notes: d.notes || "",
-        timeline: d.timeline || [],
-        collaborators: d.collaborators || [],
-      })));
+      // Local storage fallback for handed over deals if needed
+      let localHanded = [];
+      try {
+        localHanded = JSON.parse(localStorage.getItem("exim_handed_over_deals") || "[]");
+      } catch (e) {}
+
+      setDeals(data.map(d => {
+        const isHanded = d.isHandedOver || localHanded.includes(d._id) || d.handoverStatus === "Handed Over";
+        return {
+          id: d.code || d._id,
+          _id: d._id,
+          name: d.name,
+          company: d.company || "",
+          companyId: d.companyId,
+          leadId: d.leadId,
+          contactId: d.contactId,
+          value: d.value || 0,
+          stage: d.stage || "New",
+          priority: d.priority || "Medium",
+          owner: d.assignedTo || "Team Member",
+          assignedTo: d.assignedTo || "Team Member",
+          assignedToClerkId: d.assignedToClerkId,
+          expectedClose: d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString("en-IN") : "",
+          expectedCloseDate: d.expectedCloseDate,
+          closedDate: d.closedDate,
+          createdDate: d.createdDate ? new Date(d.createdDate).toLocaleDateString("en-IN") : "Recently",
+          service: d.service || "DGFT Advisory",
+          serviceId: d.serviceId,
+          notes: d.notes || "",
+          isHandedOver: isHanded,
+          handoverStatus: isHanded ? "Handed Over" : (d.handoverStatus || ""),
+          handoverData: d.handoverData || null,
+          handedOverAt: d.handedOverAt,
+          handedOverBy: d.handedOverBy,
+          timeline: d.timeline || [],
+          collaborators: d.collaborators || [],
+        };
+      }));
     } catch (err) {
       console.error("Failed to load deals", err);
       setDeals([]);
@@ -116,6 +132,7 @@ function DealsPage() {
     if (quick === "Proposal Sent") out = out.filter((d) => d.stage === "Proposal Sent");
     if (quick === "Negotiation") out = out.filter((d) => d.stage === "Negotiation");
     if (quick === "Won Deals") out = out.filter((d) => d.stage === "Won");
+    if (quick === "Handed Over") out = out.filter((d) => d.isHandedOver);
 
     if (search) {
       const s = search.toLowerCase();
@@ -135,6 +152,12 @@ function DealsPage() {
 
   // Drag and drop / inline stage change saved immediately in DB
   const handleStageChange = async (targetId, mongoId, newStage) => {
+    const targetDeal = deals.find(d => (d.id === targetId || d._id === mongoId));
+    if (targetDeal?.isHandedOver) {
+      toast.error("This deal has been handed over to the Execution Team. Stage changes are locked.");
+      return;
+    }
+
     setDeals((prev) => prev.map((d) => (d.id === targetId ? { ...d, stage: newStage } : d)));
     if (mongoId) {
       try {
@@ -150,6 +173,13 @@ function DealsPage() {
 
   const onDrop = (newStage) => {
     if (!dragId) return;
+    const targetDeal = deals.find(d => (d.id === dragId || d._id === dragMongoId));
+    if (targetDeal?.isHandedOver) {
+      toast.error("This deal has been handed over to Execution Team. Status cannot be modified.");
+      setDragId(null);
+      setDragMongoId(null);
+      return;
+    }
     handleStageChange(dragId, dragMongoId, newStage);
     setDragId(null);
     setDragMongoId(null);
@@ -336,11 +366,30 @@ function DealsPage() {
                     {list.map((d) => (
                       <div
                         key={d._id || d.id}
-                        draggable
-                        onDragStart={() => { setDragId(d.id); setDragMongoId(d._id); }}
+                        draggable={!d.isHandedOver}
+                        onDragStart={() => {
+                          if (d.isHandedOver) return;
+                          setDragId(d.id);
+                          setDragMongoId(d._id);
+                        }}
                         onClick={() => setActive(d)}
-                        className="rounded-xl border border-border bg-background p-3 shadow-xs hover:border-indigo-400 hover:shadow-md transition cursor-pointer active:cursor-grabbing group relative"
+                        className={cn(
+                          "rounded-xl border bg-background p-3 shadow-xs hover:border-indigo-400 hover:shadow-md transition cursor-pointer group relative",
+                          d.isHandedOver ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/20" : "border-border"
+                        )}
                       >
+                        {/* Handed Over Indicator Badge */}
+                        {d.isHandedOver && (
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xs">
+                              <ShieldCheck size={11} /> Handed Over
+                            </span>
+                            <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-0.5">
+                              <Lock size={10} /> Locked
+                            </span>
+                          </div>
+                        )}
+
                         <div className="font-bold text-xs text-foreground line-clamp-1 leading-snug group-hover:text-indigo-600 transition">
                           {d.name}
                         </div>
@@ -395,14 +444,21 @@ function DealsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((d) => (
-                  <tr key={d._id || d.id} className="hover:bg-muted/40 transition">
+                  <tr key={d._id || d.id} className={cn("hover:bg-muted/40 transition", d.isHandedOver && "bg-emerald-50/10")}>
                     <td className="px-4 py-3 font-semibold text-foreground">
-                      <button
-                        onClick={() => setActive(d)}
-                        className="hover:text-indigo-600 text-left cursor-pointer font-bold"
-                      >
-                        {d.name}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setActive(d)}
+                          className="hover:text-indigo-600 text-left cursor-pointer font-bold"
+                        >
+                          {d.name}
+                        </button>
+                        {d.isHandedOver && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-extrabold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            <ShieldCheck size={10} /> Handed
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground font-medium">{d.company || "—"}</td>
                     <td className="px-4 py-3">
@@ -415,13 +471,22 @@ function DealsPage() {
                       ₹{d.value ? Number(d.value).toLocaleString("en-IN") : "0"}
                     </td>
                     <td className="px-4 py-3">
-                      <select
-                        value={d.stage}
-                        onChange={(e) => handleStageChange(d.id, d._id, e.target.value)}
-                        className="rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold outline-none cursor-pointer"
-                      >
-                        {stages.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      {d.isHandedOver ? (
+                        <div
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50/80 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 cursor-not-allowed"
+                          title="Handed over to Execution Team - Status changes are locked"
+                        >
+                          <Lock size={12} className="text-emerald-600" /> Handed Over
+                        </div>
+                      ) : (
+                        <select
+                          value={d.stage}
+                          onChange={(e) => handleStageChange(d.id, d._id, e.target.value)}
+                          className="rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold outline-none cursor-pointer"
+                        >
+                          {stages.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs font-medium">
                       <span className={cn(
@@ -435,7 +500,26 @@ function DealsPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground font-medium">{d.owner}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Handover Button */}
+                        {!d.isHandedOver ? (
+                          <button
+                            onClick={() => setHandoverDeal(d)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800 px-2 py-1 text-xs font-bold transition cursor-pointer"
+                            title="Handover Deal to Execution Team"
+                          >
+                            <Send size={12} /> Handover
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setHandoverDeal(d)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 px-2 py-1 text-xs font-bold transition cursor-pointer"
+                            title="View Handover Details"
+                          >
+                            <ShieldCheck size={12} /> Handed
+                          </button>
+                        )}
+
                         <button
                           onClick={() => setActive(d)}
                           className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50 cursor-pointer"
@@ -443,13 +527,15 @@ function DealsPage() {
                         >
                           <FileText size={15} />
                         </button>
-                        <button
-                          onClick={() => setEditing(d)}
-                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-                          title="Edit Deal"
-                        >
-                          <Pencil size={15} />
-                        </button>
+                        {!d.isHandedOver && (
+                          <button
+                            onClick={() => setEditing(d)}
+                            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
+                            title="Edit Deal"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteDeal(d)}
                           className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
@@ -477,8 +563,25 @@ function DealsPage() {
             setActive(null);
             setEditing(target);
           }}
+          onHandover={() => {
+            const target = active;
+            setActive(null);
+            setHandoverDeal(target);
+          }}
           onDelete={() => handleDeleteDeal(active)}
           onRefresh={fetchDeals}
+        />
+      )}
+
+      {/* Deal Handover Modal */}
+      {handoverDeal && (
+        <DealHandoverModal
+          deal={handoverDeal}
+          onClose={() => setHandoverDeal(null)}
+          onSuccess={() => {
+            setHandoverDeal(null);
+            fetchDeals();
+          }}
         />
       )}
 
@@ -606,7 +709,7 @@ export function ServiceSelect({ value, onChange, required = true }) {
 }
 
 /* ── Full Interactive Deal Detail Drawer (View Deal) ──── */
-export function DealDetailDrawer({ deal, onClose, onEdit, onDelete, onRefresh }) {
+export function DealDetailDrawer({ deal, onClose, onEdit, onHandover, onDelete, onRefresh }) {
   const navigate = useNavigate();
   const api = useApi();
   const [tab, setTab] = useState("overview");
@@ -648,7 +751,14 @@ export function DealDetailDrawer({ deal, onClose, onEdit, onDelete, onRefresh })
                 <Briefcase size={22} />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-foreground">{deal.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-foreground">{deal.name}</h2>
+                  {deal.isHandedOver && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      <ShieldCheck size={11} /> Handed Over
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs font-semibold text-indigo-600">{deal.company || "Direct Opportunity"}</span>
                   <span className="text-xs text-muted-foreground">· ₹{deal.value ? Number(deal.value).toLocaleString("en-IN") : "0"}</span>
@@ -656,15 +766,56 @@ export function DealDetailDrawer({ deal, onClose, onEdit, onDelete, onRefresh })
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={onEdit} className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer" title="Edit Deal">
-                <Pencil size={16} />
-              </button>
+              {!deal.isHandedOver && (
+                <button onClick={onEdit} className="rounded-lg p-1.5 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 cursor-pointer" title="Edit Deal">
+                  <Pencil size={16} />
+                </button>
+              )}
               <button onClick={onDelete} className="rounded-lg p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 cursor-pointer" title="Delete Deal">
                 <Trash2 size={16} />
               </button>
               <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted cursor-pointer"><X size={18} /></button>
             </div>
           </div>
+
+          {/* Handover Locked Banner */}
+          {deal.isHandedOver ? (
+            <div className="rounded-xl border border-emerald-300 bg-gradient-to-r from-emerald-50 to-teal-50 p-3.5 dark:border-emerald-900/60 dark:from-emerald-950/40 dark:to-teal-950/40 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div>
+                  <div className="text-xs font-extrabold text-emerald-950 dark:text-emerald-200">
+                    Deal Handed Over to Execution Team
+                  </div>
+                  <p className="text-[11px] text-emerald-800/90 dark:text-emerald-300/80 mt-0.5">
+                    Stage modification is locked. Project is under active operations execution.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onHandover}
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs transition cursor-pointer shrink-0"
+              >
+                View Handover
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Send size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200">Pass Deal to Execution Team</span>
+                  <p className="text-[10px] text-indigo-800/80 dark:text-indigo-300/80">Complete the 7-part formal handover form</p>
+                </div>
+              </div>
+              <button
+                onClick={onHandover}
+                className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition cursor-pointer shrink-0"
+              >
+                <Send size={12} /> Handover Now
+              </button>
+            </div>
+          )}
 
           {/* Quick Action Buttons */}
           <div className="grid grid-cols-4 gap-2">
@@ -673,7 +824,7 @@ export function DealDetailDrawer({ deal, onClose, onEdit, onDelete, onRefresh })
               className="flex flex-col items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300 transition cursor-pointer"
             >
               <FileText size={16} className="text-indigo-600 dark:text-indigo-400" />
-              <span>Create Proposal</span>
+              <span>Proposal</span>
             </button>
             <button
               onClick={() => {
@@ -685,11 +836,11 @@ export function DealDetailDrawer({ deal, onClose, onEdit, onDelete, onRefresh })
               <span>Meetings</span>
             </button>
             <button
-              onClick={onEdit}
-              className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card p-2.5 text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 transition cursor-pointer"
+              onClick={onHandover}
+              className="flex flex-col items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 transition cursor-pointer"
             >
-              <Pencil size={16} className="text-indigo-500" />
-              <span>Edit Deal</span>
+              <Send size={16} className="text-emerald-600 dark:text-emerald-400" />
+              <span>Handover</span>
             </button>
             <button
               onClick={() => {
@@ -743,7 +894,7 @@ export function DealDetailDrawer({ deal, onClose, onEdit, onDelete, onRefresh })
               </div>
 
               <div className="grid grid-cols-2 gap-4 rounded-xl border border-border p-4 bg-muted/30">
-                <InfoItem label="Stage" value={deal.stage || "New"} highlight />
+                <InfoItem label="Stage" value={deal.isHandedOver ? "Handed Over (Locked)" : (deal.stage || "New")} highlight />
                 <InfoItem label="Priority" value={deal.priority || "Medium"} />
                 <InfoItem label="Client / Company" value={deal.company || "Not assigned"} />
                 <InfoItem label="Assigned Advisor" value={deal.owner || deal.assignedTo || "You"} />

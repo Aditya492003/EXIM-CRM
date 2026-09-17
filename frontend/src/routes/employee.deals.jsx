@@ -2,13 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
-  Search, ChevronDown, X, StickyNote, Loader2, RefreshCw, Briefcase, Plus, FileText
+  Search, ChevronDown, X, StickyNote, Loader2, RefreshCw, Briefcase, Plus, FileText, Send, ShieldCheck, Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AddDealModal, DealDetailDrawer, EditDealModal } from "@/routes/deals";
+import { DealHandoverModal } from "@/components/crm/DealHandoverModal";
 
 export const Route = createFileRoute("/employee/deals")({
   component: EmployeeDealsPage,
@@ -32,6 +33,7 @@ function EmployeeDealsPage() {
   const [loading, setLoading] = useState(true);
   const [activeDeal, setActiveDeal] = useState(null);
   const [editingDeal, setEditingDeal] = useState(null);
+  const [handoverDeal, setHandoverDeal] = useState(null);
   const [openAdd, setOpenAdd] = useState(false);
 
   const fetchDeals = useCallback(async () => {
@@ -39,30 +41,42 @@ function EmployeeDealsPage() {
       setLoading(true);
       const res = await api.get(`/deals?search=${search}`);
       const data = res.data.data || [];
-      setDeals(data.map(d => ({
-        id: d.code || d._id,
-        _id: d._id,
-        name: d.name,
-        company: d.company || "",
-        companyId: d.companyId,
-        leadId: d.leadId,
-        contactId: d.contactId,
-        value: d.value || 0,
-        stage: d.stage || "New",
-        priority: d.priority || "Medium",
-        owner: d.assignedTo || "You",
-        assignedTo: d.assignedTo || "You",
-        assignedToClerkId: d.assignedToClerkId,
-        expectedClose: d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString("en-IN") : "",
-        expectedCloseDate: d.expectedCloseDate,
-        closedDate: d.closedDate,
-        createdDate: d.createdDate ? new Date(d.createdDate).toLocaleDateString("en-IN") : "Recently",
-        service: d.service || "DGFT Advisory",
-        serviceId: d.serviceId,
-        notes: d.notes || "",
-        timeline: d.timeline || [],
-        collaborators: d.collaborators || [],
-      })));
+
+      let localHanded = [];
+      try {
+        localHanded = JSON.parse(localStorage.getItem("exim_handed_over_deals") || "[]");
+      } catch (e) {}
+
+      setDeals(data.map(d => {
+        const isHanded = d.isHandedOver || localHanded.includes(d._id) || d.handoverStatus === "Handed Over";
+        return {
+          id: d.code || d._id,
+          _id: d._id,
+          name: d.name,
+          company: d.company || "",
+          companyId: d.companyId,
+          leadId: d.leadId,
+          contactId: d.contactId,
+          value: d.value || 0,
+          stage: d.stage || "New",
+          priority: d.priority || "Medium",
+          owner: d.assignedTo || "You",
+          assignedTo: d.assignedTo || "You",
+          assignedToClerkId: d.assignedToClerkId,
+          expectedClose: d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString("en-IN") : "",
+          expectedCloseDate: d.expectedCloseDate,
+          closedDate: d.closedDate,
+          createdDate: d.createdDate ? new Date(d.createdDate).toLocaleDateString("en-IN") : "Recently",
+          service: d.service || "DGFT Advisory",
+          serviceId: d.serviceId,
+          notes: d.notes || "",
+          isHandedOver: isHanded,
+          handoverStatus: isHanded ? "Handed Over" : (d.handoverStatus || ""),
+          handoverData: d.handoverData || null,
+          timeline: d.timeline || [],
+          collaborators: d.collaborators || [],
+        };
+      }));
     } catch (error) {
       toast.error("Failed to load deals");
     } finally {
@@ -75,6 +89,12 @@ function EmployeeDealsPage() {
   }, [fetchDeals]);
 
   const handleStageChange = async (id, stage) => {
+    const target = deals.find(d => d._id === id);
+    if (target?.isHandedOver) {
+      toast.error("This deal has been handed over to the Execution Team. Stage changes are locked.");
+      return;
+    }
+
     setDeals(prev => prev.map(d => d._id === id ? { ...d, stage } : d));
     try {
       await api.patch(`/deals/${id}/stage`, { stage });
@@ -143,11 +163,18 @@ function EmployeeDealsPage() {
                   </tr>
                 ) : (
                   deals.map((d) => (
-                    <tr key={d._id} className="hover:bg-muted/30 transition">
+                    <tr key={d._id} className={cn("hover:bg-muted/30 transition", d.isHandedOver && "bg-emerald-50/10")}>
                       <td className="px-5 py-4">
-                        <button onClick={() => setActiveDeal(d)} className="font-bold hover:text-indigo-600 text-left cursor-pointer">
-                          {d.name}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setActiveDeal(d)} className="font-bold hover:text-indigo-600 text-left cursor-pointer">
+                            {d.name}
+                          </button>
+                          {d.isHandedOver && (
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-extrabold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                              <ShieldCheck size={10} /> Handed
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 font-medium text-muted-foreground">{d.company || "Direct"}</td>
                       <td className="px-5 py-4">
@@ -160,31 +187,59 @@ function EmployeeDealsPage() {
                         ₹{(d.value || 0).toLocaleString("en-IN")}
                       </td>
                       <td className="px-5 py-4">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-pointer", stageColors[d.stage] || "bg-muted text-muted-foreground")}>
-                              {d.stage} <ChevronDown size={12} />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {dealStages.map((st) => (
-                              <DropdownMenuItem key={st} onClick={() => handleStageChange(d._id, st)}>
-                                {st}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {d.isHandedOver ? (
+                          <div
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50/80 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 cursor-not-allowed"
+                            title="Handed over to Execution Team - Status changes are locked"
+                          >
+                            <Lock size={12} className="text-emerald-600" /> Handed Over
+                          </div>
+                        ) : (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-pointer", stageColors[d.stage] || "bg-muted text-muted-foreground")}>
+                                {d.stage} <ChevronDown size={12} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              {dealStages.map((st) => (
+                                <DropdownMenuItem key={st} onClick={() => handleStageChange(d._id, st)}>
+                                  {st}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-xs text-muted-foreground">
                         {d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString("en-IN") : "Not set"}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <button
-                          onClick={() => setActiveDeal(d)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
-                        >
-                          <FileText size={13} /> View Deal
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {!d.isHandedOver ? (
+                            <button
+                              onClick={() => setHandoverDeal(d)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                              title="Handover to Execution"
+                            >
+                              <Send size={12} /> Handover
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setHandoverDeal(d)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                              title="View Handover"
+                            >
+                              <ShieldCheck size={12} /> Handed
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setActiveDeal(d)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground bg-muted/60 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                          >
+                            <FileText size={13} /> View
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -205,11 +260,28 @@ function EmployeeDealsPage() {
             setActiveDeal(null);
             setEditingDeal(target);
           }}
+          onHandover={() => {
+            const target = activeDeal;
+            setActiveDeal(null);
+            setHandoverDeal(target);
+          }}
           onDelete={() => {
             fetchDeals();
             setActiveDeal(null);
           }}
           onRefresh={fetchDeals}
+        />
+      )}
+
+      {/* Deal Handover Modal */}
+      {handoverDeal && (
+        <DealHandoverModal
+          deal={handoverDeal}
+          onClose={() => setHandoverDeal(null)}
+          onSuccess={() => {
+            setHandoverDeal(null);
+            fetchDeals();
+          }}
         />
       )}
 

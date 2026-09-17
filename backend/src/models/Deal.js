@@ -64,6 +64,25 @@ const DealSchema = new Schema({
   notes: {
     type: String
   },
+  isHandedOver: {
+    type: Boolean,
+    default: false
+  },
+  handoverStatus: {
+    type: String,
+    enum: ['', 'Pending Handover', 'Handed Over'],
+    default: ''
+  },
+  handoverData: {
+    type: Schema.Types.Mixed,
+    default: null
+  },
+  handedOverAt: {
+    type: Date
+  },
+  handedOverBy: {
+    type: String
+  },
   createdByClerkId: {
     type: String
   },

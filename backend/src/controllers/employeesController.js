@@ -177,8 +177,8 @@ export const inviteEmployee = async (req, res, next) => {
       console.warn("Clerk invitation dispatch warning:", cErr.message);
     }
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       message: "Invite sent successfully",
       data: employee,
       invitationId: invitationId,
@@ -193,7 +193,7 @@ export const inviteEmployee = async (req, res, next) => {
 // @route POST /api/employees/sync
 export const syncEmployee = async (req, res, next) => {
   try {
-    const userId = req.user?.clerkId || req.auth?.userId; 
+    const userId = req.user?.clerkId || req.auth?.userId;
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
     let employee = await Employee.findOne({ clerkUserId: userId });

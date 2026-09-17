@@ -250,6 +250,14 @@ export const updateDealStage = async (req, res, next) => {
     const existing = await Deal.findOne(query);
     if (!existing) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
 
+    // Block status changes if deal has been handed over to Execution Team
+    if (existing.isHandedOver) {
+      return res.status(403).json({
+        success: false,
+        message: "This deal has already been handed over to the Execution Team. Status modification is locked.",
+      });
+    }
+
     const userClerkId = req.user?.clerkId;
     const isCollaborator = existing.collaborators?.some((c) => c.clerkId === userClerkId);
 
@@ -329,11 +337,44 @@ export const updateDealNotes = async (req, res, next) => {
       timestamp: new Date(),
     };
 
-    const deal = await Deal.findOneAndUpdate(query, { ...updateData, $push: { timeline: timelineEntry } }, { new: true });
-    if (!deal) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
+// @desc  Handover deal to execution team (locks deal status)
+// @route POST /api/deals/:id/handover
+export const handoverDeal = async (req, res, next) => {
+  try {
+    const query = userFilter(req, { _id: req.params.id });
+    const existing = await Deal.findOne(query);
+    if (!existing) return res.status(404).json({ success: false, message: "Deal not found or access denied" });
 
-    res.status(200).json({ success: true, data: deal });
+    const updaterName = req.user?.name || req.user?.email || "User";
+    const handoverData = req.body.handoverData || req.body;
+
+    const timelineEntry = {
+      activity: `Deal officially handed over to Execution Team by ${updaterName}${handoverData?.executionManager ? ` (Assigned to Manager: ${handoverData.executionManager})` : ""}`,
+      performedBy: updaterName,
+      timestamp: new Date(),
+    };
+
+    const updateData = {
+      isHandedOver: true,
+      handoverStatus: "Handed Over",
+      handoverData: handoverData,
+      handedOverAt: new Date(),
+      handedOverBy: updaterName,
+    };
+
+    const deal = await Deal.findOneAndUpdate(
+      query,
+      { ...updateData, $push: { timeline: timelineEntry } },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Deal "${deal.name}" successfully handed over to the Execution Team! Status updates are now locked.`,
+      data: deal,
+    });
   } catch (error) {
     next(error);
   }
 };
+

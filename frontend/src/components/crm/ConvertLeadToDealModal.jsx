@@ -20,6 +20,8 @@ const AMOUNT_PRESETS = [
   { label: "₹25L", value: 2500000 },
 ];
 
+import { DealHandoverModal } from "@/components/crm/DealHandoverModal";
+
 export function ConvertLeadToDealModal({ lead, onClose, onSuccess }) {
   const api = useApi();
   const { user } = useUser();
@@ -64,6 +66,7 @@ export function ConvertLeadToDealModal({ lead, onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [duplicateData, setDuplicateData] = useState(null);
   const [requestingCollab, setRequestingCollab] = useState(false);
+  const [convertedDealForHandover, setConvertedDealForHandover] = useState(null);
 
   const handleSubmit = async (e, forceConvert = false) => {
     if (e) e.preventDefault();
@@ -85,9 +88,21 @@ export function ConvertLeadToDealModal({ lead, onClose, onSuccess }) {
       };
 
       const res = await api.post(`/leads/${leadId}/convert`, payload);
+      const convertedDealObj = res.data?.data?.deal || {
+        _id: res.data?.data?._id,
+        name: formData.name,
+        company: lead?.company,
+        service: formData.service,
+        value: formData.value,
+        priority: formData.priority,
+        leadId: leadId,
+      };
+
       toast.success(res.data?.message || "Lead successfully converted to Deal! 🎉");
       onSuccess?.(res.data?.data);
-      onClose();
+
+      // Immediately open Deal Handover form for execution team
+      setConvertedDealForHandover(convertedDealObj);
     } catch (err) {
       console.error("Convert lead error:", err);
       if (err.response?.data?.isDealDuplicate && err.response?.data?.existingDeal) {
@@ -119,6 +134,22 @@ export function ConvertLeadToDealModal({ lead, onClose, onSuccess }) {
       setRequestingCollab(false);
     }
   };
+
+  if (convertedDealForHandover) {
+    return (
+      <DealHandoverModal
+        deal={convertedDealForHandover}
+        onClose={() => {
+          setConvertedDealForHandover(null);
+          onClose();
+        }}
+        onSuccess={() => {
+          setConvertedDealForHandover(null);
+          onClose();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/60 p-4 backdrop-blur-sm animate-fade-in" onClick={onClose}>
