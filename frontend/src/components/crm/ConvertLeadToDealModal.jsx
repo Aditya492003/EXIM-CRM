@@ -33,6 +33,8 @@ export function ConvertLeadToDealModal({ lead, onClose, onSuccess }) {
 
   const [formData, setFormData] = useState({
     name: `${lead?.company || lead?.name || "Client"} - ${lead?.service || "Deal"}`,
+    service: lead?.service || "DGFT Advisory",
+    serviceId: lead?.serviceId || "",
     value: 500000,
     stage: "New",
     priority: "Medium",
@@ -40,6 +42,24 @@ export function ConvertLeadToDealModal({ lead, onClose, onSuccess }) {
     assignedTo: lead?.assignedTo && lead?.assignedTo !== "Nikhil Rao" ? lead?.assignedTo : currentUserName,
     notes: lead?.notes ? `Converted from Lead: ${lead.notes}` : `Lead "${lead?.name}" converted to deal opportunity.`,
   });
+
+  const [availableServices, setAvailableServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setLoadingServices(true);
+        const res = await api.get("/services");
+        setAvailableServices(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to load services in ConvertLeadToDealModal", err);
+      } finally {
+        setLoadingServices(false);
+      }
+    };
+    fetchServices();
+  }, [api]);
 
   const [submitting, setSubmitting] = useState(false);
   const [duplicateData, setDuplicateData] = useState(null);
@@ -263,6 +283,61 @@ export function ConvertLeadToDealModal({ lead, onClose, onSuccess }) {
                 placeholder="e.g. Acme Corp - DGFT Annual Advisory"
                 className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
               />
+            </div>
+
+            {/* Service Selection */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold flex items-center gap-1.5">
+                  <Briefcase size={13} className="text-indigo-500" /> Selected Service for this Deal *
+                </label>
+                {formData.service && (
+                  <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300 px-2 py-0.5 rounded-md">
+                    {formData.service}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <select
+                  value={formData.service}
+                  onChange={(e) => {
+                    const selectedName = e.target.value;
+                    const matchedService = availableServices.find(s => s.name === selectedName);
+                    setFormData(prev => ({
+                      ...prev,
+                      service: selectedName,
+                      serviceId: matchedService?._id || prev.serviceId,
+                      name: `${lead?.company || lead?.name || "Client"} - ${selectedName || "Deal"}`,
+                    }));
+                  }}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400 cursor-pointer font-medium"
+                >
+                  {formData.service && !availableServices.some(s => s.name === formData.service) && (
+                    <option value={formData.service}>{formData.service} (from Lead)</option>
+                  )}
+                  {availableServices.length > 0 ? (
+                    availableServices.map((s) => (
+                      <option key={s._id || s.name} value={s.name}>
+                        {s.name} {s.price ? `(₹${s.price.toLocaleString("en-IN")})` : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="DGFT Advisory">DGFT Advisory</option>
+                      <option value="Advance Authorisation">Advance Authorisation</option>
+                      <option value="EPCG Scheme">EPCG Scheme</option>
+                      <option value="Customs Clearance">Customs Clearance</option>
+                      <option value="RoDTEP Scheme">RoDTEP Scheme</option>
+                      <option value="SEZ Compliance">SEZ Compliance</option>
+                      <option value="AEO Certification">AEO Certification</option>
+                      <option value="FTP Audit & Legal">FTP Audit & Legal</option>
+                    </>
+                  )}
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Pre-selected from the original lead. You can modify the specific trade service for this deal opportunity.
+                </p>
+              </div>
             </div>
 
             {/* Stage and Priority */}

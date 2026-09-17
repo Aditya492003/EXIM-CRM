@@ -671,10 +671,13 @@ export const convertLeadToDeal = async (req, res, next) => {
     const dealAssignedToClerkId = assignedToClerkId || lead.assignedToClerkId || userClerkId;
     const dealValue = Number(value) >= 0 ? Number(value) : 0;
 
+    const dealService = req.body.service || lead.service || "DGFT Advisory";
+    const dealServiceId = req.body.serviceId || lead.serviceId || undefined;
+
     // Check for duplicate active deal across workspace if not force-converting
-    if (lead.company && lead.service && !forceConvert) {
+    if (lead.company && dealService && !forceConvert) {
       const companyRegex = new RegExp(`^${lead.company.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
-      const serviceRegex = new RegExp(`^${lead.service.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
+      const serviceRegex = new RegExp(`^${dealService.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i");
 
       const existingDeal = await Deal.findOne({
         company: companyRegex,
@@ -716,7 +719,7 @@ export const convertLeadToDeal = async (req, res, next) => {
 
     const initialDealTimeline = [
       {
-        activity: `Deal created by converting Lead "${lead.name}" (${lead.company || "No Company"}) with value ₹${dealValue.toLocaleString("en-IN")} by ${userName}`,
+        activity: `Deal created by converting Lead "${lead.name}" (${lead.company || "No Company"}) for service "${dealService}" with value ₹${dealValue.toLocaleString("en-IN")} by ${userName}`,
         performedBy: userName,
         timestamp: new Date(),
       }
@@ -728,8 +731,8 @@ export const convertLeadToDeal = async (req, res, next) => {
       companyId: lead.companyId,
       leadId: lead._id,
       contactId: lead.contactId,
-      service: lead.service,
-      serviceId: lead.serviceId,
+      service: dealService,
+      serviceId: dealServiceId,
       value: dealValue,
       stage: stage,
       priority: priority,
@@ -747,7 +750,7 @@ export const convertLeadToDeal = async (req, res, next) => {
     // Update Lead status to Converted & record in lead timeline
     lead.status = "Converted";
     lead.timeline.push({
-      activity: `Lead converted to Deal "${deal.name}" (Value: ₹${dealValue.toLocaleString("en-IN")}) by ${userName}`,
+      activity: `Lead converted to Deal "${deal.name}" (Service: ${dealService}, Value: ₹${dealValue.toLocaleString("en-IN")}) by ${userName}`,
       performedBy: userName,
       timestamp: new Date(),
     });

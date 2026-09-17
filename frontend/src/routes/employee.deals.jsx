@@ -2,13 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
-  Search, ChevronDown, X, StickyNote, Loader2, RefreshCw, Briefcase, Plus
+  Search, ChevronDown, X, StickyNote, Loader2, RefreshCw, Briefcase, Plus, FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AddDealModal } from "@/routes/deals";
+import { AddDealModal, DealDetailDrawer, EditDealModal } from "@/routes/deals";
 
 export const Route = createFileRoute("/employee/deals")({
   component: EmployeeDealsPage,
@@ -31,13 +31,38 @@ function EmployeeDealsPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeDeal, setActiveDeal] = useState(null);
+  const [editingDeal, setEditingDeal] = useState(null);
   const [openAdd, setOpenAdd] = useState(false);
 
   const fetchDeals = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.get(`/deals?search=${search}`);
-      setDeals(res.data.data || []);
+      const data = res.data.data || [];
+      setDeals(data.map(d => ({
+        id: d.code || d._id,
+        _id: d._id,
+        name: d.name,
+        company: d.company || "",
+        companyId: d.companyId,
+        leadId: d.leadId,
+        contactId: d.contactId,
+        value: d.value || 0,
+        stage: d.stage || "New",
+        priority: d.priority || "Medium",
+        owner: d.assignedTo || "You",
+        assignedTo: d.assignedTo || "You",
+        assignedToClerkId: d.assignedToClerkId,
+        expectedClose: d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString("en-IN") : "",
+        expectedCloseDate: d.expectedCloseDate,
+        closedDate: d.closedDate,
+        createdDate: d.createdDate ? new Date(d.createdDate).toLocaleDateString("en-IN") : "Recently",
+        service: d.service || "DGFT Advisory",
+        serviceId: d.serviceId,
+        notes: d.notes || "",
+        timeline: d.timeline || [],
+        collaborators: d.collaborators || [],
+      })));
     } catch (error) {
       toast.error("Failed to load deals");
     } finally {
@@ -75,14 +100,14 @@ function EmployeeDealsPage() {
             >
               <Plus size={14} /> Add Deal
             </button>
-            <button onClick={fetchDeals} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition flex items-center gap-1.5">
+            <button onClick={fetchDeals} className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted transition flex items-center gap-1.5 cursor-pointer">
               <RefreshCw size={13} /> Refresh
             </button>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
               <input
                 type="text"
-                placeholder="Search deals..."
+                placeholder="Search deals, company, service..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-9 w-full rounded-xl border border-border bg-background pl-9 pr-4 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -94,24 +119,25 @@ function EmployeeDealsPage() {
         <div className="rounded-2xl border border-border bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground">
+              <thead className="border-b border-border bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <tr>
-                  <th className="px-5 py-3">Deal</th>
-                  <th className="px-5 py-3">Company</th>
-                  <th className="px-5 py-3">Value</th>
-                  <th className="px-5 py-3">Stage</th>
-                  <th className="px-5 py-3">Expected Close</th>
-                  <th className="px-5 py-3">Actions</th>
+                  <th className="px-5 py-3.5">Deal</th>
+                  <th className="px-5 py-3.5">Company</th>
+                  <th className="px-5 py-3.5">Service / Job</th>
+                  <th className="px-5 py-3.5">Value (₹)</th>
+                  <th className="px-5 py-3.5">Stage</th>
+                  <th className="px-5 py-3.5">Expected Close</th>
+                  <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {loading ? (
-                  <tr><td colSpan="6" className="p-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
+                  <tr><td colSpan="7" className="p-8 text-center text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin text-indigo-500" /></td></tr>
                 ) : deals.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="p-12 text-center">
+                    <td colSpan="7" className="p-12 text-center">
                       <Briefcase className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                      <p className="mt-2 text-sm text-muted-foreground">No deals found in your portal.</p>
+                      <p className="mt-2 text-sm text-muted-foreground font-medium">No deals found in your portal.</p>
                       <p className="text-xs text-muted-foreground/60 mt-1">Click "+ Add Deal" to create a new deal.</p>
                     </td>
                   </tr>
@@ -119,12 +145,20 @@ function EmployeeDealsPage() {
                   deals.map((d) => (
                     <tr key={d._id} className="hover:bg-muted/30 transition">
                       <td className="px-5 py-4">
-                        <button onClick={() => setActiveDeal(d)} className="font-semibold hover:text-indigo-600 text-left">
+                        <button onClick={() => setActiveDeal(d)} className="font-bold hover:text-indigo-600 text-left cursor-pointer">
                           {d.name}
                         </button>
                       </td>
-                      <td className="px-5 py-4 font-medium text-indigo-600">{d.company || "N/A"}</td>
-                      <td className="px-5 py-4 font-semibold text-emerald-600">₹{(d.value || 0).toLocaleString("en-IN")}</td>
+                      <td className="px-5 py-4 font-medium text-muted-foreground">{d.company || "Direct"}</td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/50">
+                          <Briefcase size={11} className="text-indigo-500" />
+                          {d.service || "DGFT Advisory"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 font-bold text-emerald-600 dark:text-emerald-400">
+                        ₹{(d.value || 0).toLocaleString("en-IN")}
+                      </td>
                       <td className="px-5 py-4">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -142,11 +176,14 @@ function EmployeeDealsPage() {
                         </DropdownMenu>
                       </td>
                       <td className="px-5 py-4 text-xs text-muted-foreground">
-                        {d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString() : "Not set"}
+                        {d.expectedCloseDate ? new Date(d.expectedCloseDate).toLocaleDateString("en-IN") : "Not set"}
                       </td>
-                      <td className="px-5 py-4">
-                        <button onClick={() => setActiveDeal(d)} className="text-xs font-semibold text-indigo-600 hover:underline">
-                          View Details
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          onClick={() => setActiveDeal(d)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                        >
+                          <FileText size={13} /> View Deal
                         </button>
                       </td>
                     </tr>
@@ -158,104 +195,37 @@ function EmployeeDealsPage() {
         </div>
       </div>
 
+      {/* Rich View Deal Drawer */}
       {activeDeal && (
-        <EmployeeDealDetailDrawer deal={activeDeal} onClose={() => setActiveDeal(null)} onRefresh={fetchDeals} />
+        <DealDetailDrawer
+          deal={activeDeal}
+          onClose={() => setActiveDeal(null)}
+          onEdit={() => {
+            const target = activeDeal;
+            setActiveDeal(null);
+            setEditingDeal(target);
+          }}
+          onDelete={() => {
+            fetchDeals();
+            setActiveDeal(null);
+          }}
+          onRefresh={fetchDeals}
+        />
       )}
 
+      {/* Edit Deal Modal */}
+      {editingDeal && (
+        <EditDealModal
+          deal={editingDeal}
+          onClose={() => setEditingDeal(null)}
+          onSuccess={fetchDeals}
+        />
+      )}
+
+      {/* Add Deal Modal */}
       {openAdd && (
         <AddDealModal onClose={() => setOpenAdd(false)} onSuccess={fetchDeals} />
       )}
     </AppLayout>
-  );
-}
-
-function EmployeeDealDetailDrawer({ deal, onClose, onRefresh }) {
-  const api = useApi();
-  const [notes, setNotes] = useState(deal.notes || "");
-  const [expectedClose, setExpectedClose] = useState(
-    deal.expectedCloseDate ? new Date(deal.expectedCloseDate).toISOString().split("T")[0] : ""
-  );
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      await api.patch(`/deals/${deal._id}/notes`, {
-        notes,
-        expectedClose: expectedClose || null,
-      });
-      toast.success("Notes & close date updated");
-      onRefresh();
-      onClose();
-    } catch (error) {
-      toast.error("Failed to save deal notes");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-lg bg-background p-6 shadow-2xl overflow-y-auto flex flex-col justify-between">
-        <div className="space-y-5">
-          <div className="flex items-center justify-between border-b border-border pb-4">
-            <div>
-              <h2 className="text-lg font-bold">{deal.name}</h2>
-              <p className="text-xs font-semibold text-indigo-600">{deal.company}</p>
-            </div>
-            <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted"><X size={16} /></button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="rounded-xl border border-border p-3 bg-muted/30">
-              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Deal Value</span>
-              <span className="font-bold text-emerald-600 text-sm">₹{(deal.value || 0).toLocaleString("en-IN")}</span>
-            </div>
-            <div className="rounded-xl border border-border p-3 bg-muted/30">
-              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Stage</span>
-              <span className="font-semibold text-foreground">{deal.stage || "New"}</span>
-            </div>
-            <div className="rounded-xl border border-border p-3 bg-muted/30">
-              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Assigned Advisor</span>
-              <span className="font-semibold text-foreground">{deal.assignedTo || "You"}</span>
-            </div>
-            <div className="rounded-xl border border-border p-3 bg-muted/30">
-              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Service</span>
-              <span className="font-semibold text-foreground">{deal.service || "DGFT Service"}</span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="block text-xs font-semibold">Expected Close Date</label>
-            <input
-              type="date"
-              value={expectedClose}
-              onChange={(e) => setExpectedClose(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold flex items-center gap-1.5">
-              <StickyNote size={14} className="text-indigo-500" /> Deal Notes & Strategy
-            </label>
-            <textarea
-              rows={5}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add client meeting summary, negotiation notes, or next steps..."
-              className="w-full rounded-xl border border-border bg-background p-3 text-sm outline-none focus:border-indigo-500"
-            />
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-border flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-xl border border-border px-4 py-2 text-xs font-medium hover:bg-muted">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50">
-            {saving && <Loader2 size={13} className="animate-spin" />} Save Deal
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
