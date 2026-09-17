@@ -26,11 +26,47 @@ import path from "path";
 
 const app = express();
 
+// Universal CORS & Preflight handler (Must be the very first middleware)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version"
+  );
+  res.setHeader("Access-Control-Max-Age", "86400");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+
+// Explicit cors middleware
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, true),
+    credentials: true,
+  })
+);
+app.options("*", cors());
+
+// Core body parsing middleware
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+
 // Serve local uploads folder statically
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// Ensure DB connection is active for each request (vital for serverless cold starts)
+// Ensure DB connection is active for each non-OPTIONS request (vital for serverless cold starts)
 app.use(async (req, res, next) => {
+  if (req.method === "OPTIONS") return next();
   try {
     await connectDb();
     next();
@@ -39,34 +75,6 @@ app.use(async (req, res, next) => {
     next(err);
   }
 });
-
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:3000",
-].filter(Boolean);
-
-// Core middleware
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (
-        allowedOrigins.includes(origin) ||
-        /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin) ||
-        origin.endsWith(".vercel.app")
-      ) {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    },
-    credentials: true,
-  })
-);
-
-app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // Root & Health check
 app.get("/", (req, res) => {

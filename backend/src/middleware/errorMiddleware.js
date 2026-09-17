@@ -1,6 +1,11 @@
 const errorMiddleware = (err, req, res, next) => {
     console.error("Unhandled API Error:", err);
 
+    if (req?.headers?.origin) {
+        res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+    }
+
     const statusCode = err.statusCode || err.http_code || 500;
 
     res.status(statusCode).json({
