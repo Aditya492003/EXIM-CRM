@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X, Briefcase, IndianRupee, Sparkles, Handshake, Loader2,
   Calendar, ShieldAlert, CheckCircle2, User, FileText, ArrowRight

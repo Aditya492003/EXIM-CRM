@@ -97,9 +97,21 @@ The platform operates on a workspace isolation model governed by **Clerk Authent
 
 ### 4. Deals & Sales Pipeline Management
 - **Pipeline Stages**: Structured sales stages from `New` → `Qualified` → `Proposal Sent` → `Negotiation` → `Won` / `Lost`.
+- **Trade Service Tracking & Visibility**: Explicitly captures and displays the exact trade advisory service (e.g., *DGFT Advisory*, *BIS / ISI Domestic Certification*, *EPCG Scheme*, *Advance Authorisation*, *SEZ Compliance*, *Customs Clearance*) across Kanban cards, table rows, service filters, and conversion modals.
 - **Value Tracking**: Deal values recorded in Indian Rupees (₹) with expected close dates and actual win/loss timestamps.
-- **Priority Matrix**: Flag deals as `Low`, `Medium`, or `High` priority.
-- **Inline Stage Selector**: Move deals through pipeline stages with immediate backend updates.
+- **Priority Matrix**: Flag deals as `Low`, `Medium`, or `High` priority with color-coded badges.
+- **Inline Stage Selector & Status Locking**: Move deals through pipeline stages with immediate backend updates. When a deal is officially handed over to execution, stage dropdown is locked to protect execution integrity.
+- **Deal Handover Form (`DealHandoverModal`)**:
+  - Automatically triggered upon lead conversion or manually initiated on won/active deals to transition sales opportunities to operations.
+  - **7-Section Operational Handover Form**:
+    1. *Deal Information*: Auto-filled Deal Name, Trade Service, Deal Value (₹), and Priority.
+    2. *Client Details*: Company Name, Primary Contact Person, Official Email, and Contact Number (pre-filled from Lead/Account).
+    3. *Scope Sold & Deliverables*: Multi-line WHAT WAS SOLD breakdown with checkboxes for included tasks, excluded tasks, and custom scope deliverables.
+    4. *Commercial & Billing Terms*: Billing structure (`100% Advance`, `50% Advance + 50% on Completion`, `Milestone Based`, `Net 30 Days`), payment receipt status, advance collected (₹), balance pending (₹), and invoicing instructions.
+    5. *Timelines & Urgency*: Target project delivery date, expected turnaround time (e.g., `15-20 Working Days`), and priority escalation level.
+    6. *Operational Ownership & Documents*: Assign dedicated Execution Manager, attach client documents, engagement letters, and technical datasheets.
+    7. *Internal Instructions*: Strategic context and quality remarks for the delivery team.
+- **Deal Detail Slide-Over Drawer (`DealDetailDrawer`)**: Rich side drawer offering a 360° overview of client profile, commercial financials, selected trade services, execution handover status, and chronological audit timeline.
 - **Deal Timeline & Collaborators**: Multi-member assignment allowing secondary consultants to collaborate on complex trade deals.
 
 ### 5. Company & Client Account Directory
@@ -447,10 +459,43 @@ The backend utilizes **13 Mongoose models** to support multi-tenant workspaces:
   },
   assignedTo: String,
   assignedToClerkId: String,
-  service: String,
+  service: String,                            // e.g. "DGFT Advisory", "BIS / ISI Certification"
   serviceId: { type: ObjectId, ref: 'Service' },
   expectedCloseDate: Date,
   closedDate: Date,
+  isHandedOver: { type: Boolean, default: false }, // Status locked once true
+  handoverStatus: {
+    type: String,
+    enum: ['Pending', 'Handed Over', 'Accepted', 'In Execution'],
+    default: 'Pending'
+  },
+  handoverData: {
+    dealName: String,
+    service: String,
+    value: Number,
+    priority: String,
+    company: String,
+    clientContactPerson: String,
+    clientEmail: String,
+    clientPhone: String,
+    scopeSold: String,
+    scopeIncluded: [String],
+    scopeExcluded: [String],
+    customDeliverables: String,
+    billingTerms: String,
+    paymentStatus: String,
+    advanceAmount: Number,
+    balanceAmount: Number,
+    specialFinancialNotes: String,
+    targetDeliveryDate: Date,
+    turnaroundTime: String,
+    urgencyLevel: String,
+    executionManager: String,
+    uploadedDocuments: [{ name: String, url: String, type: String }],
+    internalComments: String
+  },
+  handedOverAt: Date,
+  handedOverBy: String,
   notes: String,
   createdByClerkId: String,
   workspaceManagerId: { type: String, index: true },
@@ -709,13 +754,14 @@ All protected endpoints require the HTTP header:
 ### 💼 Deals & Pipeline (`/api/deals`)
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/deals` | Retrieve all pipeline deals with stage and priority query filters. |
-| `POST` | `/api/deals` | Create a new deal with company/contact references and value in ₹. |
-| `GET` | `/api/deals/:id` | Get deal details, value, expected closing date, and timeline. |
-| `PUT` | `/api/deals/:id` | Update deal information. |
-| `DELETE` | `/api/deals/:id` | Delete a deal from the pipeline. |
-| `PATCH` | `/api/deals/:id/stage` | Inline update deal stage (`{ "stage": "Won" }`). |
-| `PATCH` | `/api/deals/:id/notes` | Inline update deal notes. |
+| `GET` | `/api/deals` | Retrieve all pipeline deals with stage, priority, and service query filters. |
+| `POST` | `/api/deals` | Create a new deal with company/contact references, trade service, and value in ₹. |
+| `GET` | `/api/deals/:id` | Get deal details, financial value, selected service, handover data, and timeline. |
+| `PUT` | `/api/deals/:id` | Update deal information and commercial terms. |
+| `DELETE` | `/api/deals/:id` | Delete a deal from the pipeline (Owner or Manager only). |
+| `PATCH` | `/api/deals/:id/stage` | Inline update deal stage (`{ "stage": "Won" }`). Locked if handed over. |
+| `PATCH` | `/api/deals/:id/notes` | Inline update deal notes and expected closing date. |
+| `POST` | `/api/deals/:id/handover` | **Deal Handover to Execution**: Lock deal status and transfer complete 7-section operational payload to delivery team. |
 
 ### 🏢 Companies & Accounts (`/api/companies`)
 | Method | Endpoint | Description |

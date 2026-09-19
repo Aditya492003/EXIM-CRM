@@ -204,7 +204,7 @@ export function DealHandoverModal({ deal, onClose, onSuccess }) {
           handedOverDeals.push(dealId);
           localStorage.setItem("exim_handed_over_deals", JSON.stringify(handedOverDeals));
         }
-      } catch (e) {}
+      } catch (e) { }
 
       toast.success(`🎉 Deal "${deal.name}" successfully handed over to Execution Team! Status update locked.`);
       onSuccess?.();
@@ -248,9 +248,9 @@ export function DealHandoverModal({ deal, onClose, onSuccess }) {
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* 1. DEAL INFORMATION */}
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-xs space-y-3">
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-xs space-y-4">
             <div className="flex items-center gap-2 border-b border-border pb-2 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-              <Briefcase size={15} /> 1. Deal Information (Auto-filled)
+              <Briefcase size={15} /> 1. Deal Information.
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               <div>
@@ -378,52 +378,6 @@ export function DealHandoverModal({ deal, onClose, onSuccess }) {
                 className="w-full rounded-xl border border-border bg-background p-3 text-xs outline-none focus:border-indigo-400 leading-relaxed"
               />
             </div>
-
-            {/* Included & Not Included Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              {/* Included Checklist */}
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20 p-3.5 space-y-2">
-                <div className="text-xs font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
-                  <CheckCircle2 size={13} className="text-emerald-600" /> Included Deliverables
-                </div>
-                <div className="space-y-1.5 pt-1">
-                  {formData.includedItems.map((item) => {
-                    const isChecked = formData.selectedIncluded.includes(item);
-                    return (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => handleToggleIncluded(item)}
-                        className="flex items-center gap-2 text-xs text-left cursor-pointer w-full group"
-                      >
-                        {isChecked ? (
-                          <CheckSquare size={14} className="text-emerald-600 shrink-0" />
-                        ) : (
-                          <Square size={14} className="text-muted-foreground shrink-0" />
-                        )}
-                        <span className={cn("text-xs transition", isChecked ? "font-semibold text-emerald-950 dark:text-emerald-200" : "text-muted-foreground")}>
-                          {item}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Not Included */}
-              <div className="rounded-xl border border-rose-200 bg-rose-50/40 dark:border-rose-900/40 dark:bg-rose-950/20 p-3.5 space-y-2">
-                <div className="text-xs font-bold text-rose-900 dark:text-rose-300 flex items-center gap-1.5">
-                  <AlertCircle size={13} className="text-rose-600" /> Not Included (Exclusions)
-                </div>
-                <textarea
-                  rows={3}
-                  value={formData.notIncludedText}
-                  onChange={(e) => setFormData({ ...formData, notIncludedText: e.target.value })}
-                  placeholder="• Testing laboratory charges&#10;• Government fees&#10;• Travel expenses"
-                  className="w-full rounded-lg border border-rose-200/80 bg-background/80 p-2 text-xs outline-none focus:border-rose-400 text-foreground"
-                />
-              </div>
-            </div>
           </div>
 
           {/* 4. CLIENT REQUIREMENTS & COMMITMENTS — SALES INPUT */}
@@ -433,7 +387,7 @@ export function DealHandoverModal({ deal, onClose, onSuccess }) {
             </div>
             <div>
               <label className="text-[11px] font-semibold text-foreground block mb-1">
-                What does the client specifically need? (Type manually)
+                What does the client specifically need?
               </label>
               <textarea
                 rows={3}
@@ -453,7 +407,7 @@ export function DealHandoverModal({ deal, onClose, onSuccess }) {
             </div>
             <div>
               <label className="text-[11px] font-semibold text-foreground block mb-1">
-                Specific commitments made by sales person (Type manually)
+                Specific commitments made by sales person
               </label>
               <textarea
                 rows={3}
@@ -473,7 +427,7 @@ export function DealHandoverModal({ deal, onClose, onSuccess }) {
 
             <div>
               <label className="text-[11px] font-semibold text-foreground block mb-1">
-                Special Instructions (Type manually)
+                Special Instructions.
               </label>
               <textarea
                 rows={2}
@@ -487,16 +441,10 @@ export function DealHandoverModal({ deal, onClose, onSuccess }) {
             {/* Documents Checklist & Upload */}
             <div className="rounded-xl border border-border bg-muted/30 p-3.5 space-y-3">
               <label className="text-xs font-bold text-foreground block">
-                Documents Received from Client / Proposal Stage
+                Documents Received from Client.
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                {[
-                  { key: "productSpecification", label: "Product Specification" },
-                  { key: "clientQuotation", label: "Client Quotation" },
-                  { key: "existingCertificates", label: "Existing Certificates" },
-                  { key: "technicalDocuments", label: "Technical Documents" },
-                  { key: "other", label: "Other Attachments" },
-                ].map((doc) => {
+                {[].map((doc) => {
                   const isChecked = formData.uploadedDocsChecklist[doc.key];
                   return (
                     <button

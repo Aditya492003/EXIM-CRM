@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useState, useEffect, useCallback } from "react";
 import {
   Search, ChevronDown, Phone, Mail, X, Calendar, StickyNote,
-  Loader2, RefreshCw, MessageSquare, Plus, Briefcase, CheckCircle2
+  Loader2, RefreshCw, MessageSquare, Plus, Briefcase, CheckCircle2, Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/lib/api";
@@ -77,8 +77,13 @@ function EmployeeLeadsPage() {
   }, [fetchLeads]);
 
   const handleStatusChange = async (id, status) => {
-    setLeads(prev => prev.map(l => l._id === id ? { ...l, status } : l));
     const currentLead = leads.find(l => l._id === id);
+    if (currentLead?.status === "Converted" || currentLead?.status === "Lost") {
+      toast.error(`Cannot change status: Lead is already ${currentLead.status}.`);
+      return;
+    }
+
+    setLeads(prev => prev.map(l => l._id === id ? { ...l, status } : l));
 
     if (status === "Converted" && currentLead) {
       setConvertingLead({ ...currentLead, status: "Converted" });
@@ -88,7 +93,7 @@ function EmployeeLeadsPage() {
       await api.patch(`/leads/${id}/status`, { status });
       toast.success(`Status updated to "${status}"`);
     } catch (error) {
-      toast.error("Failed to update status — please try again");
+      toast.error(error.response?.data?.message || "Failed to update status — please try again");
       fetchLeads();
     }
 
@@ -184,20 +189,30 @@ function EmployeeLeadsPage() {
                       <td className="px-5 py-4 text-muted-foreground">{l.email || "—"}</td>
                       <td className="px-5 py-4">
                         <div className="flex flex-col items-start gap-1">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-pointer", statusColors[l.status] || "bg-muted text-muted-foreground")}>
-                                {l.status} <ChevronDown size={12} />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              {statuses.map((st) => (
-                                <DropdownMenuItem key={st} onClick={() => handleStatusChange(l._id, st)}>
-                                  {st}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {l.status === "Converted" || l.status === "Lost" ? (
+                            <span
+                              title={`Status locked: Lead is marked as ${l.status}`}
+                              className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-not-allowed opacity-90 shadow-2xs", statusColors[l.status] || "bg-muted text-muted-foreground")}
+                            >
+                              <Lock size={10} className="shrink-0" />
+                              {l.status}
+                            </span>
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border cursor-pointer hover:opacity-85 transition", statusColors[l.status] || "bg-muted text-muted-foreground")}>
+                                  {l.status} <ChevronDown size={12} />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                {statuses.map((st) => (
+                                  <DropdownMenuItem key={st} onClick={() => handleStatusChange(l._id, st)}>
+                                    {st}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                           {l.status === "Converted" && (
                             <button
                               onClick={() => setConvertingLead(l)}

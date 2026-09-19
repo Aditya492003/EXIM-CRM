@@ -5,7 +5,7 @@ import {
   Filter, MessageSquare, MoreHorizontal, Phone, Plus, RefreshCw, Search,
   Sparkles, Star, Trash2, Upload, X, Mail, FileText, Handshake, CheckCircle2,
   Clock, User as UserIcon, PhoneCall, StickyNote, Pencil, Globe, Loader2, Building2,
-  ExternalLink, ShieldCheck, Tag, Briefcase, IndianRupee
+  ExternalLink, ShieldCheck, Tag, Briefcase, IndianRupee, Lock
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/crm/UserAvatar";
@@ -145,8 +145,13 @@ function LeadsPage() {
 
   // Real-time backend sync on inline status dropdown change
   const handleStatusChange = async (id, newStatus, mongoId) => {
-    setLeadsList((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
     const currentLead = leadsList.find((l) => l.id === id || l._id === mongoId);
+    if (currentLead?.status === "Converted" || currentLead?.status === "Lost") {
+      toast.error(`Cannot change status: Lead is already ${currentLead.status}.`);
+      return;
+    }
+
+    setLeadsList((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
 
     if (newStatus === "Converted" && currentLead) {
       setConvertingLead({ ...currentLead, status: "Converted", _id: mongoId || currentLead._id });
@@ -157,7 +162,7 @@ function LeadsPage() {
         await api.patch(`/leads/${mongoId}/status`, { status: newStatus });
         toast.success(`Status updated to ${newStatus}`);
       } catch (err) {
-        toast.error("Failed to update status in DB");
+        toast.error(err.response?.data?.message || "Failed to update status in DB");
         fetchLeads();
       }
     }
@@ -667,16 +672,30 @@ function LeadsPage() {
 
                     {isVisible("status") && (
                       <td className="px-4 py-3">
-                        <select
-                          value={l.status}
-                          onChange={(e) => handleStatusChange(l.id, e.target.value, l._id)}
-                          className={cn(
-                            "rounded-lg border bg-background px-2 py-1 text-xs font-semibold outline-none focus:border-indigo-400 cursor-pointer",
-                            l.status === "Converted" ? "border-emerald-300 text-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20" : "border-border"
-                          )}
-                        >
-                          {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        {l.status === "Converted" || l.status === "Lost" ? (
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              title={`Status locked: Lead is marked as ${l.status}`}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-2xs cursor-not-allowed opacity-90",
+                                l.status === "Converted"
+                                  ? "border-emerald-300 text-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20"
+                                  : "border-rose-300 text-rose-700 bg-rose-50/50 dark:bg-rose-950/20"
+                              )}
+                            >
+                              <Lock size={10} className="shrink-0" />
+                              {l.status}
+                            </span>
+                          </div>
+                        ) : (
+                          <select
+                            value={l.status}
+                            onChange={(e) => handleStatusChange(l.id, e.target.value, l._id)}
+                            className="rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold outline-none focus:border-indigo-400 cursor-pointer"
+                          >
+                            {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        )}
                         {l.status === "Converted" && (
                           <button
                             onClick={() => setConvertingLead(l)}
@@ -1927,10 +1946,30 @@ function EditLeadModal({ lead, onClose, onSuccess }) {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold">Lead Status</label>
-                <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400">
+                <label className="mb-1 block text-xs font-semibold flex items-center justify-between">
+                  <span>Lead Status</span>
+                  {(lead?.status === "Converted" || lead?.status === "Lost") && (
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <Lock size={10} /> Status Locked
+                    </span>
+                  )}
+                </label>
+                <select
+                  value={formData.status}
+                  disabled={lead?.status === "Converted" || lead?.status === "Lost"}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className={cn(
+                    "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-indigo-400",
+                    (lead?.status === "Converted" || lead?.status === "Lost") && "cursor-not-allowed opacity-70 bg-muted/50"
+                  )}
+                >
                   {statuses.map((s) => <option key={s}>{s}</option>)}
                 </select>
+                {(lead?.status === "Converted" || lead?.status === "Lost") && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Status cannot be modified because this lead is already {lead.status}.
+                  </p>
+                )}
               </div>
             </div>
           </section>

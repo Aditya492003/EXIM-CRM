@@ -472,6 +472,11 @@ export const updateLead = async (req, res, next) => {
       timelineEntry.activity += ` (Contact "${contactRecord.name}" linked to Company "${companyRecord.name}")`;
     }
 
+    // Enforce status immutability: Converted or Lost leads cannot have their status altered
+    if (existing.status === "Converted" || existing.status === "Lost") {
+      req.body.status = existing.status;
+    }
+
     const lead = await Lead.findOneAndUpdate(
       query,
       { ...req.body, $push: { timeline: timelineEntry } },
@@ -508,6 +513,19 @@ export const updateLeadStatus = async (req, res, next) => {
     if (!status) return res.status(400).json({ success: false, message: "Status is required" });
 
     const query = userFilter(req, { _id: req.params.id });
+    const existingLead = await Lead.findOne(query);
+    if (!existingLead) return res.status(404).json({ success: false, message: "Lead not found or access denied" });
+
+    // Block status change if lead is already Converted or Lost
+    if (existingLead.status === "Converted" || existingLead.status === "Lost") {
+      if (existingLead.status !== status) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot change status: Lead is already marked as "${existingLead.status}" and cannot be modified.`,
+        });
+      }
+    }
+
     const updaterName = req.user?.name || "User";
 
     const timelineEntry = {
@@ -516,8 +534,8 @@ export const updateLeadStatus = async (req, res, next) => {
       timestamp: new Date(),
     };
 
-    const lead = await Lead.findOneAndUpdate(
-      query,
+    const lead = await Lead.findByIdAndUpdate(
+      existingLead._id,
       { status, $push: { timeline: timelineEntry } },
       { new: true, runValidators: true }
     );
